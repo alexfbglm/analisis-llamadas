@@ -28,7 +28,8 @@ def diarize_audio(audio, sr, num_speakers=2):
     mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13).T[speech_indices]
 
     # Apply Spectral Clustering for speaker diarization
-    clustering = AgglomerativeClustering(n_clusters=num_speakers, affinity='cosine', linkage='average')
+    clustering = AgglomerativeClustering(n_clusters=num_speakers, metric='cosine', linkage='average')
+
     speaker_labels = clustering.fit_predict(mfccs)
 
     return speaker_labels, speech_indices
