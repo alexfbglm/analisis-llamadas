@@ -31,6 +31,7 @@ def load_llama_model():
     return tokenizer, model
 
 
+
 # Cargar el modelo al inicio
 tokenizer, model = load_llama_model()
 
