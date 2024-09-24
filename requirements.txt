@@ -7,3 +7,5 @@ webrtcvad
 scikit-learn
 tqdm
 requests
+pandas
+
