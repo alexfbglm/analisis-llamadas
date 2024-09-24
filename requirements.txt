@@ -1,0 +1,8 @@
+streamlit
+git+https://github.com/openai/whisper.git
+torchaudio
+librosa
+numpy
+webrtcvad
+scikit-learn
+tqdm
