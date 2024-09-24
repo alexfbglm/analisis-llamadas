@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 import webrtcvad
 import requests
+import tempfile
 
 # Function to perform Voice Activity Detection (VAD) using WebRTC VAD
 def apply_vad(audio, sr, frame_duration=30):
@@ -29,7 +30,6 @@ def diarize_audio(audio, sr, num_speakers=2):
 
     # Apply Spectral Clustering for speaker diarization
     clustering = AgglomerativeClustering(n_clusters=num_speakers, metric='cosine', linkage='average')
-
     speaker_labels = clustering.fit_predict(mfccs)
 
     return speaker_labels, speech_indices
@@ -109,15 +109,20 @@ uploaded_file = st.file_uploader("Upload an audio file", type=["mp3", "wav"])
 if uploaded_file is not None and api_key:
     st.audio(uploaded_file, format="audio/mp3")
 
+    # Save uploaded file to a temporary location
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio_file:
+        temp_audio_file.write(uploaded_file.read())
+        temp_audio_path = temp_audio_file.name
+
     # Load and process audio
-    audio, sr = librosa.load(uploaded_file, sr=None)
+    audio, sr = librosa.load(temp_audio_path, sr=None)
 
     # Diarize the audio
     speaker_labels, speech_indices = diarize_audio(audio, sr)
 
-    # Transcribe the audio
+    # Transcribe the audio using Whisper
     st.write("Transcribing the audio... Please wait.")
-    result = transcribe_audio(uploaded_file)
+    result = transcribe_audio(temp_audio_path)
 
     # Align transcription with speaker diarization
     transcript_with_speakers = []
