@@ -124,7 +124,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -215,12 +215,29 @@ def analyze_multiple_calls(zip_file, api_key):
         st.success(f"Encontrados {len(audio_files)} archivos de audio para procesar.")
         
         for audio_filename in audio_files:
-            if audio_filename in st.session_state['processed_files']:
-                st.info(f"{audio_filename} ya ha sido procesado previamente. Saltando...")
+            # Normalizar el nombre del archivo (sin carpetas)
+            normalized_filename = os.path.basename(audio_filename)
+            
+            if normalized_filename in st.session_state['processed_files']:
+                st.info(f"{normalized_filename} ya ha sido procesado previamente. Mostrando resultados existentes.")
                 # Encontrar el análisis correspondiente
-                existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == audio_filename), None)
-                if existing_analysis:
-                    results.append(existing_analysis)
+                existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == normalized_filename), None)
+                existing_transcription = st.session_state['transcriptions'].get(normalized_filename, [])
+                if existing_analysis and existing_transcription:
+                    with st.expander(f"Mostrar llamada transcrita: {normalized_filename}"):
+                        for line in existing_transcription:
+                            st.write(line)
+
+                    with st.expander(f"Resultado del análisis: {normalized_filename}"):
+                        st.json({
+                            "Tipo de llamada": existing_analysis.get("tipo_llamada", ""),
+                            "Razón": existing_analysis.get("razon", ""),
+                            "Información solicitada": existing_analysis.get("info_solicitada", ""),
+                            "Resolución de la llamada": existing_analysis.get("resolucion", ""),
+                            "Sentimiento": existing_analysis.get("sentimiento", ""),
+                            "Observaciones": existing_analysis.get("observaciones", "")
+                        })
+                results.append(existing_analysis)
                 continue  # Saltar al siguiente archivo
             
             with z.open(audio_filename) as audio_file:
@@ -228,21 +245,21 @@ def analyze_multiple_calls(zip_file, api_key):
                     temp_audio.write(audio_file.read())
                     temp_audio_path = temp_audio.name
 
-            st.write(f"### Procesando: {audio_filename}")
+            st.write(f"### Procesando: {normalized_filename}")
             analysis = analyze_single_call(temp_audio_path, api_key)
 
             if analysis is None:
-                st.warning(f"No se pudo procesar {audio_filename}.")
+                st.warning(f"No se pudo procesar {normalized_filename}.")
                 os.remove(temp_audio_path)
                 continue
 
             # Mostrar la transcripción dentro de un expander
-            with st.expander(f"Mostrar llamada transcrita: {audio_filename}"):
+            with st.expander(f"Mostrar llamada transcrita: {normalized_filename}"):
                 for line in analysis["transcripcion"]:
                     st.write(line)
 
             # Mostrar el resultado del análisis dentro de otro expander
-            with st.expander(f"Resultado del análisis: {audio_filename}"):
+            with st.expander(f"Resultado del análisis: {normalized_filename}"):
                 if "error" in analysis:
                     st.error(analysis["error"])
                 else:
@@ -257,7 +274,7 @@ def analyze_multiple_calls(zip_file, api_key):
 
             # Añadir los resultados al listado para generar el Excel
             result_entry = {
-                "Nombre de la llamada": audio_filename,
+                "Nombre de la llamada": normalized_filename,
                 "Tipo de llamada": analysis.get("tipo_llamada", ""),
                 "Razón": analysis.get("razon", ""),
                 "Información solicitada": analysis.get("info_solicitada", ""),
@@ -267,14 +284,14 @@ def analyze_multiple_calls(zip_file, api_key):
             }
             results.append(result_entry)
             st.session_state['analysis_results'].append(result_entry)
-            st.session_state['processed_files'].append(audio_filename)
+            st.session_state['processed_files'].append(normalized_filename)
 
             # Opcionalmente, permitir descargar la transcripción etiquetada
             transcript_text = "\n".join(analysis["transcripcion"])
             st.download_button(
-                label=f"Descargar Transcripción Etiquetada: {audio_filename}",
+                label=f"Descargar Transcripción Etiquetada: {normalized_filename}",
                 data=transcript_text,
-                file_name=f"labeled_transcript_{os.path.splitext(audio_filename)[0]}.txt"
+                file_name=f"labeled_transcript_{os.path.splitext(normalized_filename)[0]}.txt"
             )
 
             # Opcionalmente, permitir descargar el análisis en formato JSON
@@ -288,9 +305,9 @@ def analyze_multiple_calls(zip_file, api_key):
                     "Observaciones": analysis["observaciones"]
                 }, ensure_ascii=False, indent=4)
                 st.download_button(
-                    label=f"Descargar Análisis JSON: {audio_filename}",
+                    label=f"Descargar Análisis JSON: {normalized_filename}",
                     data=analysis_json_str,
-                    file_name=f"analysis_{os.path.splitext(audio_filename)[0]}.json"
+                    file_name=f"analysis_{os.path.splitext(normalized_filename)[0]}.json"
                 )
 
             # Eliminar el archivo temporal después de procesarlo
@@ -337,7 +354,7 @@ def handle_chat(user_message, analysis_data, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",
+        "model": "gpt-4",
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -459,7 +476,7 @@ if api_key:
                 # Mostrar los resultados existentes
                 existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == uploaded_file.name), None)
                 existing_transcription = st.session_state['transcriptions'].get(uploaded_file.name, [])
-                if existing_analysis:
+                if existing_analysis and existing_transcription:
                     with st.expander("Mostrar llamada transcrita"):
                         for line in existing_transcription:
                             st.write(line)
