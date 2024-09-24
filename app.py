@@ -34,10 +34,11 @@ def diarize_audio(audio, sr, num_speakers=2):
     distance_matrix = squareform(pdist(mfccs, metric='cosine'))
 
     # Aplicamos AgglomerativeClustering usando la distancia precomputada
-    clustering = AgglomerativeClustering(n_clusters=num_speakers, affinity='precomputed', linkage='average')
+    clustering = AgglomerativeClustering(n_clusters=num_speakers, metric='precomputed', linkage='average')
     speaker_labels = clustering.fit_predict(distance_matrix)
 
     return speaker_labels, speech_indices
+
 
 # Función para transcribir audio usando Whisper con una barra de progreso
 def transcribe_audio_data_with_progress(audio_data, sr):
