@@ -3,13 +3,14 @@ import librosa
 import whisper
 import numpy as np
 import zipfile
-from sklearn.cluster import AgglomerativeClustering  # Importación necesaria
+from sklearn.cluster import AgglomerativeClustering
 import webrtcvad
 import requests
 import tempfile
 import os
 import pandas as pd
 import json
+from scipy.spatial.distance import pdist, squareform
 
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
@@ -28,8 +29,14 @@ def diarize_audio(audio, sr, num_speakers=2):
     speech_flags = apply_vad(audio, sr)
     speech_indices = np.where(speech_flags == True)[0]
     mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13).T[speech_indices]
-    clustering = AgglomerativeClustering(n_clusters=num_speakers, affinity='cosine', linkage='average')  # Corregir el parámetro
-    speaker_labels = clustering.fit_predict(mfccs)
+
+    # Calculamos la matriz de distancias utilizando la distancia de coseno
+    distance_matrix = squareform(pdist(mfccs, metric='cosine'))
+
+    # Aplicamos AgglomerativeClustering usando la distancia precomputada
+    clustering = AgglomerativeClustering(n_clusters=num_speakers, affinity='precomputed', linkage='average')
+    speaker_labels = clustering.fit_predict(distance_matrix)
+
     return speaker_labels, speech_indices
 
 # Función para transcribir audio usando Whisper con una barra de progreso
@@ -47,7 +54,6 @@ def transcribe_audio_data_with_progress(audio_data, sr):
         result['segments'].append(segment)
         progress = (segment['end'] / total_duration)  # Actualizar progreso
         progress_bar.progress(min(progress, 1.0))
-        time.sleep(0.1)  # Pequeña pausa para simular el progreso en tiempo real
     
     return result
 
@@ -142,28 +148,6 @@ def analyze_single_call(audio_file, api_key):
     observaciones = analysis_json.get("observaciones", "")
 
     return transcript_with_speakers, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones
-
-# Función para analizar múltiples llamadas (ZIP)
-def analyze_multiple_calls(zip_file, api_key):
-    results = []
-    
-    with zipfile.ZipFile(zip_file, 'r') as z:
-        for audio_filename in z.namelist():
-            if audio_filename.endswith(".mp3") or audio_filename.endswith(".wav"):  # Asegurarse de que son archivos de audio válidos
-                with z.open(audio_filename) as audio_file:
-                    transcript, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones = analyze_single_call(audio_file, api_key)
-
-                    results.append({
-                        "Llamada": audio_filename,
-                        "Transcripción": transcript,  # Aquí almacenamos la transcripción completa
-                        "Tipo de llamada": tipo_llamada,
-                        "Razón": razon,
-                        "Información solicitada": info_solicitada,
-                        "Resolución de la llamada": resolucion,
-                        "Sentimiento": sentimiento,
-                        "Observaciones": observaciones
-                    })
-    return results
 
 # Interfaz de Streamlit en español
 st.title("Herramienta de análisis de llamadas")
