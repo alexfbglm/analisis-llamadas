@@ -9,3 +9,4 @@ tqdm
 requests
 pandas
 scipy
+xlsxwriter
