@@ -14,22 +14,22 @@ import os
 import time
 from io import BytesIO
 
-# Importar librerías para Llama-2
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# Función para cargar el modelo Llama-2-7B-Chat
 @st.cache_resource
 def load_llama_model():
     model_name = "meta-llama/Llama-2-7b-chat-hf"  # Asegúrate de que el nombre del modelo es correcto y tienes acceso
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=st.secrets["huggingface_token"])
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         device_map="auto",
         torch_dtype=torch.float16,
-        load_in_8bit=True  # Opcional: Usa 8-bit para reducir el uso de memoria si tu hardware lo permite
+        load_in_8bit=True,  # Opcional: Usa 8-bit para reducir el uso de memoria si tu hardware lo permite
+        use_auth_token=st.secrets["huggingface_token"]
     )
     return tokenizer, model
+
 
 # Cargar el modelo al inicio
 tokenizer, model = load_llama_model()
