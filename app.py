@@ -6,6 +6,7 @@ from sklearn.cluster import AgglomerativeClustering
 import webrtcvad
 import requests
 import tempfile
+import time
 
 # Function to perform Voice Activity Detection (VAD) using WebRTC VAD
 def apply_vad(audio, sr, frame_duration=30):
@@ -54,6 +55,7 @@ def transcribe_audio_data_with_progress(audio_data, sr):
         result['segments'].append(segment)
         progress = (segment['end'] / total_duration)  # Update progress
         progress_bar.progress(min(progress, 1.0))  # Ensure it doesn't go above 1.0
+        time.sleep(0.1)  # Small delay to simulate real-time progress
     
     return result
 
@@ -176,4 +178,5 @@ if uploaded_file is not None and api_key:
     # Optionally, download the labeled transcript
     transcript_text = "\n".join(transcript_with_speakers)
     st.download_button(label="Download Labeled Transcript", data=transcript_text, file_name="labeled_transcript.txt")
+
 
