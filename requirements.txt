@@ -8,4 +8,4 @@ scikit-learn
 tqdm
 requests
 pandas
-
+scipy
