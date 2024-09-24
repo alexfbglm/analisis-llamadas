@@ -4,6 +4,7 @@ import whisper
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 import webrtcvad
+import requests
 
 # Function to perform Voice Activity Detection (VAD) using WebRTC VAD
 def apply_vad(audio, sr, frame_duration=30):
@@ -38,13 +39,73 @@ def transcribe_audio(audio_path):
     result = model.transcribe(audio_path)
     return result
 
+# Function to load the labeled transcription from file
+def load_transcription(file_path):
+    with open(file_path, 'r') as file:
+        transcription = file.readlines()
+    return transcription
+
+# Function to create the prompt for GPT-4o Mini analysis
+def create_prompt(transcription):
+    conversation = "\n".join(transcription)
+    prompt = f"""
+    A continuación tienes una conversación entre un operador de servicio al cliente (Speaker 0) y un cliente (Speaker 1).
+    Necesito que dividas la relación de llamadas en los siguientes tipos:
+
+    1. Informativas (horarios, CLUB, disponibilidad o características de productos, financiación, etc.)
+    2. Sobre estado pedidos (no entregados, retrasados, cambio de dirección de entrega o recogida, o método de entrega/recogida)
+    3. Reclamaciones sobre productos/pedidos ya entregados (mala experiencia, no funciona, está roto, quiero devolverlo,…)
+    4. Intención de compra (quieren comprar un producto o contratar un servicio del cual no existe ningún pedido previo)
+    5. Otras.
+
+    También hay que identificar el sentimiento de cada una de estas tipologías (positivo, negativo, neutro).
+
+    En relación a las llamadas informativas, necesitamos saber cuáles son las más repetidas y qué tipo de información se solicita.
+    Para pedidos, necesitamos identificar si hay alguna tienda, tipo de producto o servicio que tenga más índice de incidencias o reclamaciones.
+
+    Además, necesitamos identificar si la llamada ha quedado resuelta o no.
+
+    Aquí está la transcripción etiquetada:
+
+    {conversation}
+    """
+    return prompt
+
+# Function to send the prompt to GPT-4-0 Mini and get the analysis
+def analyze_call_with_gpt_mini(prompt, api_key):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 1500
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code == 200:
+        return response.json()["choices"][0]["message"]["content"]
+    else:
+        return f"Error {response.status_code}: {response.text}"
+
 # Streamlit interface
 st.title("Call Analysis Tool")
+
+# Sidebar for API key input
+api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
 
 # Upload an audio file
 uploaded_file = st.file_uploader("Upload an audio file", type=["mp3", "wav"])
 
-if uploaded_file is not None:
+if uploaded_file is not None and api_key:
     st.audio(uploaded_file, format="audio/mp3")
 
     # Load and process audio
@@ -65,11 +126,30 @@ if uploaded_file is not None:
         speaker = speaker_labels[nearest_index]
         transcript_with_speakers.append(f"Speaker {speaker}: {segment['text']}")
 
+    # Save the transcript with speaker labels to a file
+    with open('labeled_transcript.txt', 'w') as f:
+        for line in transcript_with_speakers:
+            f.write(line + '\n')
+
     # Display the transcription with speaker labels
     st.write("\nTranscription with Speaker Labels:")
     for line in transcript_with_speakers:
         st.write(line)
 
-    # Generate a labeled transcript .txt file
+    # Load the labeled transcription for analysis
+    transcription = load_transcription('labeled_transcript.txt')
+
+    # Create the prompt for GPT
+    prompt = create_prompt(transcription)
+
+    # Analyze the call using GPT
+    st.write("Analyzing the call... Please wait.")
+    analysis = analyze_call_with_gpt_mini(prompt, api_key)
+
+    # Display the analysis result
+    st.write("\nAnalysis Result:")
+    st.write(analysis)
+
+    # Optionally, download the labeled transcript
     transcript_text = "\n".join(transcript_with_speakers)
     st.download_button(label="Download Labeled Transcript", data=transcript_text, file_name="labeled_transcript.txt")
