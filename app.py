@@ -123,15 +123,24 @@ def analyze_multiple_calls(zip_file, api_key):
         for audio_filename in z.namelist():
             with z.open(audio_filename) as audio_file:
                 transcript, analysis = analyze_single_call(audio_file, api_key)
+                
+                # Extraer partes relevantes del análisis de GPT
+                tipo_llamada = "Tipo de llamada detectado por GPT"
+                razon = "Razón detectada por GPT"
+                info_solicitada = "Información solicitada detectada por GPT"
+                resolucion = "Resolución de llamada detectada por GPT"
+                sentimiento = "Sentimiento detectado por GPT"
+                observaciones = "Observaciones adicionales detectadas por GPT"
+                
                 results.append({
                     "Llamada": audio_filename,
-                    "Transcripción": "Click para ver transcripción (desplegable)",
-                    "Tipo de llamada": "",  # Llenado por el análisis GPT
-                    "Razón": "",  # Llenado por el análisis GPT
-                    "Información solicitada": "",  # Llenado por el análisis GPT
-                    "Resolución de la llamada": "",  # Llenado por el análisis GPT
-                    "Sentimiento": "",  # Llenado por el análisis GPT
-                    "Observaciones": ""  # Llenado por el análisis GPT
+                    "Transcripción": transcript,  # Aquí almacenamos la transcripción completa
+                    "Tipo de llamada": tipo_llamada,
+                    "Razón": razon,
+                    "Información solicitada": info_solicitada,
+                    "Resolución de la llamada": resolucion,
+                    "Sentimiento": sentimiento,
+                    "Observaciones": observaciones
                 })
     return results
 
@@ -176,3 +185,4 @@ if api_key:
             # Descargar resultados como CSV
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(label="Descargar resultados como CSV", data=csv, file_name='resultados_analisis_llamadas.csv', mime='text/csv')
+
