@@ -6,3 +6,4 @@ numpy
 webrtcvad
 scikit-learn
 tqdm
+requests
