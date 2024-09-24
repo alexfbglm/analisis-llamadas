@@ -156,10 +156,11 @@ if uploaded_file is not None and api_key:
         for line in transcript_with_speakers:
             f.write(line + '\n')
 
-    # Display the transcription with speaker labels
-    st.write("\nTranscription with Speaker Labels:")
-    for line in transcript_with_speakers:
-        st.write(line)
+    # Display the transcription inside an expander (collapsible section)
+    with st.expander("Mostrar llamada transcrita"):
+        st.write("\nTranscription with Speaker Labels:")
+        for line in transcript_with_speakers:
+            st.write(line)
 
     # Load the labeled transcription for analysis
     transcription = load_transcription('labeled_transcript.txt')
@@ -178,5 +179,3 @@ if uploaded_file is not None and api_key:
     # Optionally, download the labeled transcript
     transcript_text = "\n".join(transcript_with_speakers)
     st.download_button(label="Download Labeled Transcript", data=transcript_text, file_name="labeled_transcript.txt")
-
-
