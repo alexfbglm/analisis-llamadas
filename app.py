@@ -35,14 +35,26 @@ def diarize_audio(audio, sr, num_speakers=2):
     return speaker_labels, speech_indices
 
 # Whisper transcription function using audio data directly (bypassing ffmpeg)
-def transcribe_audio_data(audio_data, sr):
+def transcribe_audio_data_with_progress(audio_data, sr):
     model = whisper.load_model("base")
+    
     # Whisper expects 16kHz audio, so resample if needed
     if sr != 16000:
         audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
     
-    # Whisper expects audio as a NumPy array
-    result = model.transcribe(audio_data)
+    # Initialize progress bar
+    progress_bar = st.progress(0)
+    total_duration = len(audio_data) / sr  # Total duration of the audio in seconds
+    
+    # Perform transcription with progress
+    result = {'segments': []}
+    segments = model.transcribe(audio_data, verbose=False, fp16=False)['segments']
+    
+    for i, segment in enumerate(segments):
+        result['segments'].append(segment)
+        progress = (segment['end'] / total_duration)  # Update progress
+        progress_bar.progress(min(progress, 1.0))  # Ensure it doesn't go above 1.0
+    
     return result
 
 # Function to load the labeled transcription from file
@@ -125,9 +137,9 @@ if uploaded_file is not None and api_key:
     # Diarize the audio
     speaker_labels, speech_indices = diarize_audio(audio_data, sr)
 
-    # Transcribe the audio using Whisper with audio data
+    # Transcribe the audio using Whisper with progress bar
     st.write("Transcribing the audio... Please wait.")
-    result = transcribe_audio_data(audio_data, sr)
+    result = transcribe_audio_data_with_progress(audio_data, sr)
 
     # Align transcription with speaker diarization
     transcript_with_speakers = []
@@ -164,3 +176,4 @@ if uploaded_file is not None and api_key:
     # Optionally, download the labeled transcript
     transcript_text = "\n".join(transcript_with_speakers)
     st.download_button(label="Download Labeled Transcript", data=transcript_text, file_name="labeled_transcript.txt")
+
