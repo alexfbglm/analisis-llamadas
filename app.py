@@ -188,9 +188,26 @@ def analyze_single_call(audio_path, api_key):
     }
 
 # Función para analizar múltiples llamadas desde un archivo ZIP
-def analyze_multiple_calls(zip_file, api_key):
-    results = []
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def process_audio_file(z, audio_filename):
+    with z.open(audio_filename) as audio_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_filename)[1]) as temp_audio:
+            temp_audio.write(audio_file.read())
+            temp_audio_path = temp_audio.name
+
+    st.write(f"### Procesando: {audio_filename}")
+    analysis = analyze_single_call(temp_audio_path)
+
+    # Eliminar el archivo temporal después de procesarlo
+    os.remove(temp_audio_path)
     
+    return audio_filename, analysis
+
+def analyze_multiple_calls(zip_file):
+    results = []
+    max_workers = 4  # Ajusta según los recursos de tu máquina
+
     with zipfile.ZipFile(zip_file, 'r') as z:
         audio_extensions = [".mp3", ".wav", ".m4a", ".flac", ".ogg"]
         audio_files = [f for f in z.namelist() if os.path.splitext(f)[1].lower() in audio_extensions]
@@ -201,78 +218,85 @@ def analyze_multiple_calls(zip_file, api_key):
         
         st.success(f"Encontrados {len(audio_files)} archivos de audio para procesar.")
         
-        for audio_filename in audio_files:
-            with z.open(audio_filename) as audio_file:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_filename)[1]) as temp_audio:
-                    temp_audio.write(audio_file.read())
-                    temp_audio_path = temp_audio.name
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Enviar todas las tareas al ejecutor
+            futures = {executor.submit(process_audio_file, z, audio_filename): audio_filename for audio_filename in audio_files}
+            
+            # Procesar los resultados a medida que se completan
+            for future in as_completed(futures):
+                audio_filename = futures[future]
+                try:
+                    filename, analysis = future.result()
+                    if analysis:
+                        # Mostrar la transcripción dentro de un expander
+                        with st.expander(f"Mostrar llamada transcrita: {filename}"):
+                            for line in analysis["transcripcion"]:
+                                st.write(line)
 
-            st.write(f"### Procesando: {audio_filename}")
-            analysis = analyze_single_call(temp_audio_path, api_key)
+                        # Mostrar el resultado del análisis dentro de otro expander
+                        with st.expander(f"Resultado del análisis: {filename}"):
+                            if "error" in analysis:
+                                st.error(analysis["error"])
+                            else:
+                                st.json({
+                                    "Tipo de llamada": analysis["tipo_llamada"],
+                                    "Razón": analysis["razon"],
+                                    "Información solicitada": analysis["info_solicitada"],
+                                    "Resolución de la llamada": analysis["resolucion"],
+                                    "Sentimiento": analysis["sentimiento"],
+                                    "Observaciones": analysis["observaciones"]
+                                })
 
-            if analysis is None:
-                st.warning(f"No se pudo procesar {audio_filename}.")
-                os.remove(temp_audio_path)
-                continue
+                        # Añadir los resultados al listado para generar el Excel
+                        results.append({
+                            "Nombre de la llamada": filename,
+                            "Tipo de llamada": analysis.get("tipo_llamada", ""),
+                            "Razón": analysis.get("razon", ""),
+                            "Información solicitada": analysis.get("info_solicitada", ""),
+                            "Resolución de la llamada": analysis.get("resolucion", ""),
+                            "Sentimiento": analysis.get("sentimiento", ""),
+                            "Observaciones": analysis.get("observaciones", "")
+                        })
 
-            # Mostrar la transcripción dentro de un expander
-            with st.expander(f"Mostrar llamada transcrita: {audio_filename}"):
-                for line in analysis["transcripcion"]:
-                    st.write(line)
+                        # Opcionalmente, permitir descargar la transcripción etiquetada
+                        transcript_text = "\n".join(analysis["transcripcion"])
+                        st.download_button(
+                            label=f"Descargar Transcripción Etiquetada: {filename}",
+                            data=transcript_text,
+                            file_name=f"labeled_transcript_{os.path.splitext(filename)[0]}.txt"
+                        )
 
-            # Mostrar el resultado del análisis dentro de otro expander
-            with st.expander(f"Resultado del análisis: {audio_filename}"):
-                if "error" in analysis:
-                    st.error(analysis["error"])
-                else:
-                    st.json({
-                        "Tipo de llamada": analysis["tipo_llamada"],
-                        "Razón": analysis["razon"],
-                        "Información solicitada": analysis["info_solicitada"],
-                        "Resolución de la llamada": analysis["resolucion"],
-                        "Sentimiento": analysis["sentimiento"],
-                        "Observaciones": analysis["observaciones"]
-                    })
+                        # Opcionalmente, permitir descargar el análisis en formato JSON
+                        if "tipo_llamada" in analysis:
+                            analysis_json_str = json.dumps({
+                                "Tipo de llamada": analysis["tipo_llamada"],
+                                "Razón": analysis["razon"],
+                                "Información solicitada": analysis["info_solicitada"],
+                                "Resolución de la llamada": analysis["resolucion"],
+                                "Sentimiento": analysis["sentimiento"],
+                                "Observaciones": analysis["observaciones"]
+                            }, ensure_ascii=False, indent=4)
+                            st.download_button(
+                                label=f"Descargar Análisis JSON: {filename}",
+                                data=analysis_json_str,
+                                file_name=f"analysis_{os.path.splitext(filename)[0]}.json"
+                            )
+                    
+                        # Añadir al estado de análisis para el chat y generación de Excel
+                        st.session_state['analysis_results'].append({
+                            "Nombre de la llamada": filename,
+                            "Tipo de llamada": analysis.get("tipo_llamada", ""),
+                            "Razón": analysis.get("razon", ""),
+                            "Información solicitada": analysis.get("info_solicitada", ""),
+                            "Resolución de la llamada": analysis.get("resolucion", ""),
+                            "Sentimiento": analysis.get("sentimiento", ""),
+                            "Observaciones": analysis.get("observaciones", "")
+                        })
+                except Exception as e:
+                    st.warning(f"No se pudo procesar {audio_filename}: {e}")
 
-            # Añadir los resultados al listado para generar el Excel
-            results.append({
-                "Nombre de la llamada": audio_filename,
-                "Tipo de llamada": analysis.get("tipo_llamada", ""),
-                "Razón": analysis.get("razon", ""),
-                "Información solicitada": analysis.get("info_solicitada", ""),
-                "Resolución de la llamada": analysis.get("resolucion", ""),
-                "Sentimiento": analysis.get("sentimiento", ""),
-                "Observaciones": analysis.get("observaciones", "")
-            })
-
-            # Opcionalmente, permitir descargar la transcripción etiquetada
-            transcript_text = "\n".join(analysis["transcripcion"])
-            st.download_button(
-                label=f"Descargar Transcripción Etiquetada: {audio_filename}",
-                data=transcript_text,
-                file_name=f"labeled_transcript_{os.path.splitext(audio_filename)[0]}.txt"
-            )
-
-            # Opcionalmente, permitir descargar el análisis en formato JSON
-            if "tipo_llamada" in analysis:
-                analysis_json_str = json.dumps({
-                    "Tipo de llamada": analysis["tipo_llamada"],
-                    "Razón": analysis["razon"],
-                    "Información solicitada": analysis["info_solicitada"],
-                    "Resolución de la llamada": analysis["resolucion"],
-                    "Sentimiento": analysis["sentimiento"],
-                    "Observaciones": analysis["observaciones"]
-                }, ensure_ascii=False, indent=4)
-                st.download_button(
-                    label=f"Descargar Análisis JSON: {audio_filename}",
-                    data=analysis_json_str,
-                    file_name=f"analysis_{os.path.splitext(audio_filename)[0]}.json"
-                )
-
-            # Eliminar el archivo temporal después de procesarlo
-            os.remove(temp_audio_path)
-    
     return results
+
 
 # Función para generar el archivo Excel
 def generate_excel(results):
