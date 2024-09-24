@@ -10,3 +10,5 @@ requests
 pandas
 scipy
 xlsxwriter
+transformers
+torch
