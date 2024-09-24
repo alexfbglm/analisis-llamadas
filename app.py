@@ -12,6 +12,7 @@ from scipy.spatial.distance import pdist, squareform
 import tempfile
 import os
 import time
+from io import BytesIO
 
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
@@ -211,6 +212,7 @@ def analyze_multiple_calls(zip_file, api_key):
 
             if analysis is None:
                 st.warning(f"No se pudo procesar {audio_filename}.")
+                os.remove(temp_audio_path)
                 continue
 
             # Mostrar la transcripción dentro de un expander
@@ -231,6 +233,17 @@ def analyze_multiple_calls(zip_file, api_key):
                         "Sentimiento": analysis["sentimiento"],
                         "Observaciones": analysis["observaciones"]
                     })
+
+            # Añadir los resultados al listado para generar el Excel
+            results.append({
+                "Nombre de la llamada": audio_filename,
+                "Tipo de llamada": analysis.get("tipo_llamada", ""),
+                "Razón": analysis.get("razon", ""),
+                "Información solicitada": analysis.get("info_solicitada", ""),
+                "Resolución de la llamada": analysis.get("resolucion", ""),
+                "Sentimiento": analysis.get("sentimiento", ""),
+                "Observaciones": analysis.get("observaciones", "")
+            })
 
             # Opcionalmente, permitir descargar la transcripción etiquetada
             transcript_text = "\n".join(analysis["transcripcion"])
@@ -258,14 +271,93 @@ def analyze_multiple_calls(zip_file, api_key):
 
             # Eliminar el archivo temporal después de procesarlo
             os.remove(temp_audio_path)
-
+    
     return results
+
+# Función para generar el archivo Excel
+def generate_excel(results):
+    df = pd.DataFrame(results)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
+    processed_data = output.getvalue()
+    return processed_data
+
+# Función para manejar el chat
+def handle_chat(user_message, analysis_data, api_key):
+    if not user_message:
+        return ""
+    
+    # Preparar el contexto a partir de los datos de análisis
+    context = "Aquí tienes los análisis de las llamadas:\n\n"
+    for call in analysis_data:
+        context += f"Llamada: {call['Nombre de la llamada']}\n"
+        for key, value in call.items():
+            if key != "Nombre de la llamada":
+                context += f"{key}: {value}\n"
+        context += "\n"
+    
+    prompt = f"""
+    Usa la siguiente información de análisis de llamadas para responder a las preguntas del usuario.
+    
+    {context}
+    
+    Usuario: {user_message}
+    Asistente:
+    """
+    
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "gpt-4",
+        "messages": [
+            {"role": "system", "content": "Eres un asistente útil."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 1500
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        assistant_reply = response.json()["choices"][0]["message"]["content"]
+        return assistant_reply
+    except requests.exceptions.RequestException as e:
+        return f"Error en la solicitud: {e}"
+    except json.JSONDecodeError:
+        return "Error al procesar la respuesta del asistente."
+
+# Inicializar el estado para el chat
+if 'chat_history' not in st.session_state:
+    st.session_state['chat_history'] = []
 
 # Interfaz de Streamlit en español
 st.title("Herramienta de Análisis de Llamadas")
 
-# Sidebar para ingresar la API Key
-api_key = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
+# Sidebar para ingresar la API Key y el Chat
+with st.sidebar:
+    st.header("Configuración")
+    api_key = st.text_input("Introduce tu OpenAI API Key", type="password")
+    
+    st.header("Chat de Soporte")
+    user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:")
+    if st.button("Enviar") and user_message:
+        if 'analysis_results' in st.session_state:
+            chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
+            st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
+        else:
+            st.warning("Por favor, realiza primero el análisis de las llamadas.")
+    
+    if st.session_state['chat_history']:
+        st.subheader("Historial del Chat")
+        for chat in st.session_state['chat_history']:
+            st.markdown(f"**Usuario:** {chat['usuario']}")
+            st.markdown(f"**Asistente:** {chat['asistente']}")
 
 # Opción para seleccionar entre análisis de una llamada o varias
 analysis_type = st.radio("Selecciona tipo de análisis", ("Análisis de una llamada", "Análisis de varias llamadas (ZIP)"))
@@ -329,6 +421,19 @@ if api_key:
                         data=analysis_json_str,
                         file_name=f"analysis_{os.path.splitext(uploaded_file.name)[0]}.json"
                     )
+                
+                # Guardar el análisis en el estado para el chat
+                if 'analysis_results' not in st.session_state:
+                    st.session_state['analysis_results'] = []
+                st.session_state['analysis_results'].append({
+                    "Nombre de la llamada": uploaded_file.name,
+                    "Tipo de llamada": analysis.get("tipo_llamada", ""),
+                    "Razón": analysis.get("razon", ""),
+                    "Información solicitada": analysis.get("info_solicitada", ""),
+                    "Resolución de la llamada": analysis.get("resolucion", ""),
+                    "Sentimiento": analysis.get("sentimiento", ""),
+                    "Observaciones": analysis.get("observaciones", "")
+                })
     
     elif analysis_type == "Análisis de varias llamadas (ZIP)":
         uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
@@ -336,6 +441,21 @@ if api_key:
         if uploaded_zip:
             st.write(f"Archivo ZIP subido: {uploaded_zip.name}")
             st.write("Procesando el archivo ZIP... Por favor espera.")
-            analyze_multiple_calls(uploaded_zip, api_key)
+            analysis_results = analyze_multiple_calls(uploaded_zip, api_key)
+            
+            # Guardar los análisis en el estado para el chat y para generar el Excel
+            if 'analysis_results' not in st.session_state:
+                st.session_state['analysis_results'] = []
+            st.session_state['analysis_results'].extend(analysis_results)
+            
+            # Generar y mostrar el botón para descargar el Excel
+            if analysis_results:
+                excel_data = generate_excel(analysis_results)
+                st.download_button(
+                    label="Descargar Análisis en Excel",
+                    data=excel_data,
+                    file_name="analisis_llamadas.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 else:
     st.warning("Por favor, introduce tu OpenAI API Key en la barra lateral.")
