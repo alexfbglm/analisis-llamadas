@@ -7,6 +7,7 @@ import requests
 import tempfile
 import pandas as pd
 import json
+from sklearn.cluster import AgglomerativeClustering  # Importación correcta
 
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
@@ -25,7 +26,7 @@ def diarize_audio(audio, sr, num_speakers=2):
     speech_flags = apply_vad(audio, sr)
     speech_indices = np.where(speech_flags == True)[0]
     mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13).T[speech_indices]
-    clustering = AgglomerativeClustering(n_clusters=num_speakers, metric='cosine', linkage='average')
+    clustering = AgglomerativeClustering(n_clusters=num_speakers, affinity='cosine', linkage='average')  # Corregir el parámetro
     speaker_labels = clustering.fit_predict(mfccs)
     return speaker_labels, speech_indices
 
@@ -166,6 +167,4 @@ if api_key:
             st.write(f"Resolución de la llamada: {resolucion}")
             st.write(f"Sentimiento: {sentimiento}")
             st.write(f"Observaciones: {observaciones}")
-
-
 
