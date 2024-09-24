@@ -11,9 +11,9 @@ import os
 import pandas as pd
 import time
 
-# Function to perform Voice Activity Detection (VAD) using WebRTC VAD
+# Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
-    vad = webrtcvad.Vad(3)  # Aggressive mode for VAD
+    vad = webrtcvad.Vad(3)  # Modo agresivo para VAD
     frames = librosa.util.frame(audio, frame_length=int(sr * frame_duration / 1000), hop_length=int(sr * frame_duration / 1000))
     speech_flags = []
 
@@ -23,46 +23,35 @@ def apply_vad(audio, sr, frame_duration=30):
 
     return np.array(speech_flags)
 
-# Function to extract features and perform diarization using spectral clustering
+# Función para realizar la diarización de audio usando clustering
 def diarize_audio(audio, sr, num_speakers=2):
-    # Apply Voice Activity Detection (VAD)
     speech_flags = apply_vad(audio, sr)
     speech_indices = np.where(speech_flags == True)[0]
-
-    # Extract MFCCs (Mel Frequency Cepstral Coefficients) for speaker features
     mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13).T[speech_indices]
-
-    # Apply Spectral Clustering for speaker diarization
     clustering = AgglomerativeClustering(n_clusters=num_speakers, metric='cosine', linkage='average')
     speaker_labels = clustering.fit_predict(mfccs)
-
     return speaker_labels, speech_indices
 
-# Whisper transcription function using audio data directly (bypassing ffmpeg)
+# Función para transcribir audio usando Whisper con una barra de progreso
 def transcribe_audio_data_with_progress(audio_data, sr):
     model = whisper.load_model("base")
-    
-    # Whisper expects 16kHz audio, so resample if needed
     if sr != 16000:
         audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
     
-    # Initialize progress bar
     progress_bar = st.progress(0)
-    total_duration = len(audio_data) / sr  # Total duration of the audio in seconds
-    
-    # Perform transcription with progress
+    total_duration = len(audio_data) / sr  # Duración total del audio en segundos
     result = {'segments': []}
     segments = model.transcribe(audio_data, verbose=False, fp16=False)['segments']
     
     for i, segment in enumerate(segments):
         result['segments'].append(segment)
-        progress = (segment['end'] / total_duration)  # Update progress
-        progress_bar.progress(min(progress, 1.0))  # Ensure it doesn't go above 1.0
-        time.sleep(0.1)  # Small delay to simulate real-time progress
+        progress = (segment['end'] / total_duration)  # Actualizar progreso
+        progress_bar.progress(min(progress, 1.0))
+        time.sleep(0.1)  # Pequeña pausa para simular el progreso en tiempo real
     
     return result
 
-# Function to create the prompt for GPT-4o Mini analysis
+# Función para crear el prompt para GPT
 def create_prompt(transcription):
     conversation = "\n".join(transcription)
     prompt = f"""
@@ -77,18 +66,13 @@ def create_prompt(transcription):
 
     También hay que identificar el sentimiento de cada una de estas tipologías (positivo, negativo, neutro).
 
-    En relación a las llamadas informativas, necesitamos saber cuáles son las más repetidas y qué tipo de información se solicita.
-    Para pedidos, necesitamos identificar si hay alguna tienda, tipo de producto o servicio que tenga más índice de incidencias o reclamaciones.
-
-    Además, necesitamos identificar si la llamada ha quedado resuelta o no.
-
     Aquí está la transcripción etiquetada:
 
     {conversation}
     """
     return prompt
 
-# Function to send the prompt to GPT-4-0 Mini and get the analysis
+# Función para enviar el prompt a GPT-4o Mini y obtener el análisis
 def analyze_call_with_gpt_mini(prompt, api_key):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
@@ -99,7 +83,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     data = {
         "model": "gpt-4o-mini",
         "messages": [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
@@ -113,14 +97,12 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     else:
         return f"Error {response.status_code}: {response.text}"
 
-# Function to analyze a single audio file
+# Función para analizar una sola llamada
 def analyze_single_call(audio_file, api_key):
-    # Process the audio
     audio_data, sr = librosa.load(audio_file, sr=None)
     speaker_labels, speech_indices = diarize_audio(audio_data, sr)
     result = transcribe_audio_data_with_progress(audio_data, sr)
 
-    # Generate the transcript with speaker labels
     transcript_with_speakers = []
     for segment in result['segments']:
         word_start = segment['start']
@@ -128,73 +110,69 @@ def analyze_single_call(audio_file, api_key):
         speaker = speaker_labels[nearest_index]
         transcript_with_speakers.append(f"Speaker {speaker}: {segment['text']}")
 
-    # Create the prompt for GPT analysis
     prompt = create_prompt(transcript_with_speakers)
     analysis = analyze_call_with_gpt_mini(prompt, api_key)
 
     return transcript_with_speakers, analysis
 
-# Function to handle multiple audio files (ZIP)
+# Función para analizar múltiples llamadas (ZIP)
 def analyze_multiple_calls(zip_file, api_key):
     results = []
     
-    # Unzip and process each file
     with zipfile.ZipFile(zip_file, 'r') as z:
         for audio_filename in z.namelist():
             with z.open(audio_filename) as audio_file:
                 transcript, analysis = analyze_single_call(audio_file, api_key)
-                
-                # Store results for each call
                 results.append({
                     "Llamada": audio_filename,
                     "Transcripción": "Click para ver transcripción (desplegable)",
-                    "Tipo de llamada": "",  # This would be filled by the GPT analysis
-                    "Razón": "",  # Filled by analysis
-                    "Información solicitada": "",  # Filled by analysis
-                    "Resolución de la llamada": "",  # Filled by analysis
-                    "Sentimiento": "",  # Filled by analysis
-                    "Observaciones": ""  # Filled by analysis
+                    "Tipo de llamada": "",  # Llenado por el análisis GPT
+                    "Razón": "",  # Llenado por el análisis GPT
+                    "Información solicitada": "",  # Llenado por el análisis GPT
+                    "Resolución de la llamada": "",  # Llenado por el análisis GPT
+                    "Sentimiento": "",  # Llenado por el análisis GPT
+                    "Observaciones": ""  # Llenado por el análisis GPT
                 })
     return results
 
-# Streamlit interface
-st.title("Call Analysis Tool")
+# Interfaz de Streamlit en español
+st.title("Herramienta de análisis de llamadas")
 
-# Sidebar for API key input
-api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
+# Sidebar para ingresar la API Key
+api_key = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
 
-# Option to choose single or multiple call analysis
-analysis_type = st.radio("Select analysis type", ("Single Call", "Multiple Calls (ZIP)"))
+# Opción para seleccionar entre análisis de una llamada o varias
+analysis_type = st.radio("Selecciona tipo de análisis", ("Análisis de una llamada", "Análisis de varias llamadas (ZIP)"))
 
 if api_key:
-    if analysis_type == "Single Call":
-        uploaded_file = st.file_uploader("Upload an audio file", type=["mp3", "wav"])
+    if analysis_type == "Análisis de una llamada":
+        uploaded_file = st.file_uploader("Sube un archivo de audio", type=["mp3", "wav"])
         
         if uploaded_file:
             st.audio(uploaded_file, format="audio/mp3")
-            st.write("Transcribing the audio... Please wait.")
+            st.write("Transcribiendo el audio... Por favor espera.")
             transcript, analysis = analyze_single_call(uploaded_file, api_key)
             
-            # Display the transcription inside an expander (collapsible section)
+            # Mostrar transcripción en un desplegable
             with st.expander("Mostrar llamada transcrita"):
                 for line in transcript:
                     st.write(line)
             
-            # Display analysis result
-            st.write("\nAnalysis Result:")
+            # Mostrar resultado del análisis
+            st.write("\nResultado del análisis:")
             st.write(analysis)
     
-    elif analysis_type == "Multiple Calls (ZIP)":
-        uploaded_zip = st.file_uploader("Upload a ZIP file with audio files", type=["zip"])
+    elif analysis_type == "Análisis de varias llamadas (ZIP)":
+        uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
         
         if uploaded_zip:
-            st.write("Processing the ZIP file... Please wait.")
+            st.write("Procesando el archivo ZIP... Por favor espera.")
             results = analyze_multiple_calls(uploaded_zip, api_key)
             
-            # Display results in a table
+            # Mostrar resultados en tabla
             df = pd.DataFrame(results)
             st.write(df)
 
-            # Allow user to download the results
+            # Descargar resultados como CSV
             csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(label="Download results as CSV", data=csv, file_name='call_analysis_results.csv', mime='text/csv')
+            st.download_button(label="Descargar resultados como CSV", data=csv, file_name='resultados_analisis_llamadas.csv', mime='text/csv')
