@@ -360,7 +360,7 @@ def handle_chat(user_message, analysis_data, api_key):
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.7,
-        "max_tokens": 1500
+        "max_tokens": 500
     }
 
     try:
