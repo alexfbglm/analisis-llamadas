@@ -2,12 +2,14 @@ import streamlit as st
 import librosa
 import whisper
 import numpy as np
+import zipfile
+from sklearn.cluster import AgglomerativeClustering  # Importación necesaria
 import webrtcvad
 import requests
 import tempfile
+import os
 import pandas as pd
 import json
-from sklearn.cluster import AgglomerativeClustering  # Importación correcta
 
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
@@ -30,17 +32,22 @@ def diarize_audio(audio, sr, num_speakers=2):
     speaker_labels = clustering.fit_predict(mfccs)
     return speaker_labels, speech_indices
 
-# Función para transcribir audio usando Whisper
+# Función para transcribir audio usando Whisper con una barra de progreso
 def transcribe_audio_data_with_progress(audio_data, sr):
     model = whisper.load_model("base")
     if sr != 16000:
         audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
     
+    progress_bar = st.progress(0)
+    total_duration = len(audio_data) / sr  # Duración total del audio en segundos
     result = {'segments': []}
     segments = model.transcribe(audio_data, verbose=False, fp16=False)['segments']
     
-    for segment in segments:
+    for i, segment in enumerate(segments):
         result['segments'].append(segment)
+        progress = (segment['end'] / total_duration)  # Actualizar progreso
+        progress_bar.progress(min(progress, 1.0))
+        time.sleep(0.1)  # Pequeña pausa para simular el progreso en tiempo real
     
     return result
 
@@ -136,6 +143,28 @@ def analyze_single_call(audio_file, api_key):
 
     return transcript_with_speakers, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones
 
+# Función para analizar múltiples llamadas (ZIP)
+def analyze_multiple_calls(zip_file, api_key):
+    results = []
+    
+    with zipfile.ZipFile(zip_file, 'r') as z:
+        for audio_filename in z.namelist():
+            if audio_filename.endswith(".mp3") or audio_filename.endswith(".wav"):  # Asegurarse de que son archivos de audio válidos
+                with z.open(audio_filename) as audio_file:
+                    transcript, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones = analyze_single_call(audio_file, api_key)
+
+                    results.append({
+                        "Llamada": audio_filename,
+                        "Transcripción": transcript,  # Aquí almacenamos la transcripción completa
+                        "Tipo de llamada": tipo_llamada,
+                        "Razón": razon,
+                        "Información solicitada": info_solicitada,
+                        "Resolución de la llamada": resolucion,
+                        "Sentimiento": sentimiento,
+                        "Observaciones": observaciones
+                    })
+    return results
+
 # Interfaz de Streamlit en español
 st.title("Herramienta de análisis de llamadas")
 
@@ -167,4 +196,18 @@ if api_key:
             st.write(f"Resolución de la llamada: {resolucion}")
             st.write(f"Sentimiento: {sentimiento}")
             st.write(f"Observaciones: {observaciones}")
+    
+    elif analysis_type == "Análisis de varias llamadas (ZIP)":
+        uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
+        
+        if uploaded_zip:
+            st.write("Procesando el archivo ZIP... Por favor espera.")
+            results = analyze_multiple_calls(uploaded_zip, api_key)
+            
+            # Mostrar resultados en tabla
+            df = pd.DataFrame(results)
+            st.write(df)
 
+            # Descargar resultados como CSV
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(label="Descargar resultados como CSV", data=csv, file_name='resultados_analisis_llamadas.csv', mime='text/csv')
