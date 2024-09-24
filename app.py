@@ -14,6 +14,16 @@ import os
 import time
 from io import BytesIO
 
+# Inicializar el estado para los análisis, archivos procesados y transcripciones
+if 'chat_history' not in st.session_state:
+    st.session_state['chat_history'] = []
+if 'analysis_results' not in st.session_state:
+    st.session_state['analysis_results'] = []
+if 'processed_files' not in st.session_state:
+    st.session_state['processed_files'] = []
+if 'transcriptions' not in st.session_state:
+    st.session_state['transcriptions'] = {}
+
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
     vad = webrtcvad.Vad(3)  # Modo agresivo para VAD
@@ -114,7 +124,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4o",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -166,6 +176,9 @@ def analyze_single_call(audio_path, api_key):
                 speaker = "Desconocido"
         transcript_with_speakers.append(f"Speaker {speaker}: {segment['text']}")
 
+    # Almacenar la transcripción en el estado
+    st.session_state['transcriptions'][os.path.basename(audio_path)] = transcript_with_speakers
+
     prompt = create_prompt(transcript_with_speakers)
     analysis_json = analyze_call_with_gpt_mini(prompt, api_key)
 
@@ -202,6 +215,14 @@ def analyze_multiple_calls(zip_file, api_key):
         st.success(f"Encontrados {len(audio_files)} archivos de audio para procesar.")
         
         for audio_filename in audio_files:
+            if audio_filename in st.session_state['processed_files']:
+                st.info(f"{audio_filename} ya ha sido procesado previamente. Saltando...")
+                # Encontrar el análisis correspondiente
+                existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == audio_filename), None)
+                if existing_analysis:
+                    results.append(existing_analysis)
+                continue  # Saltar al siguiente archivo
+            
             with z.open(audio_filename) as audio_file:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_filename)[1]) as temp_audio:
                     temp_audio.write(audio_file.read())
@@ -235,7 +256,7 @@ def analyze_multiple_calls(zip_file, api_key):
                     })
 
             # Añadir los resultados al listado para generar el Excel
-            results.append({
+            result_entry = {
                 "Nombre de la llamada": audio_filename,
                 "Tipo de llamada": analysis.get("tipo_llamada", ""),
                 "Razón": analysis.get("razon", ""),
@@ -243,7 +264,10 @@ def analyze_multiple_calls(zip_file, api_key):
                 "Resolución de la llamada": analysis.get("resolucion", ""),
                 "Sentimiento": analysis.get("sentimiento", ""),
                 "Observaciones": analysis.get("observaciones", "")
-            })
+            }
+            results.append(result_entry)
+            st.session_state['analysis_results'].append(result_entry)
+            st.session_state['processed_files'].append(audio_filename)
 
             # Opcionalmente, permitir descargar la transcripción etiquetada
             transcript_text = "\n".join(analysis["transcripcion"])
@@ -313,7 +337,7 @@ def handle_chat(user_message, analysis_data, api_key):
     }
 
     data = {
-        "model": "gpt-4",
+        "model": "gpt-4o-mini",
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -332,10 +356,6 @@ def handle_chat(user_message, analysis_data, api_key):
     except json.JSONDecodeError:
         return "Error al procesar la respuesta del asistente."
 
-# Inicializar el estado para el chat
-if 'chat_history' not in st.session_state:
-    st.session_state['chat_history'] = []
-
 # Interfaz de Streamlit en español
 st.title("Herramienta de Análisis de Llamadas")
 
@@ -347,7 +367,7 @@ with st.sidebar:
     st.header("Chat de Soporte")
     user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:")
     if st.button("Enviar") and user_message:
-        if 'analysis_results' in st.session_state:
+        if st.session_state['analysis_results']:
             chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
             st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
         else:
@@ -355,7 +375,7 @@ with st.sidebar:
     
     if st.session_state['chat_history']:
         st.subheader("Historial del Chat")
-        for chat in st.session_state['chat_history']:
+        for chat in reversed(st.session_state['chat_history']):
             st.markdown(f"**Usuario:** {chat['usuario']}")
             st.markdown(f"**Asistente:** {chat['asistente']}")
 
@@ -367,73 +387,92 @@ if api_key:
         uploaded_file = st.file_uploader("Sube un archivo de audio", type=["mp3", "wav"])
         
         if uploaded_file:
-            st.audio(uploaded_file, format="audio/mp3")
-            st.write("Transcribiendo y analizando el audio... Por favor espera.")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_audio:
-                temp_audio.write(uploaded_file.read())
-                temp_audio_path = temp_audio.name
-            
-            analysis = analyze_single_call(temp_audio_path, api_key)
-            
-            # Eliminar el archivo temporal después de procesarlo
-            os.remove(temp_audio_path)
-            
-            if analysis is not None:
-                # Mostrar transcripción en un desplegable
-                with st.expander("Mostrar llamada transcrita"):
-                    for line in analysis["transcripcion"]:
-                        st.write(line)
+            if uploaded_file.name not in st.session_state['processed_files']:
+                st.audio(uploaded_file, format="audio/mp3")
+                st.write("Transcribiendo y analizando el audio... Por favor espera.")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_audio:
+                    temp_audio.write(uploaded_file.read())
+                    temp_audio_path = temp_audio.name
                 
-                # Mostrar resultado del análisis
-                with st.expander("Resultado del análisis"):
-                    if "error" in analysis:
-                        st.error(analysis["error"])
-                    else:
-                        st.json({
+                analysis = analyze_single_call(temp_audio_path, api_key)
+                
+                # Eliminar el archivo temporal después de procesarlo
+                os.remove(temp_audio_path)
+                
+                if analysis is not None:
+                    # Mostrar transcripción en un desplegable
+                    with st.expander("Mostrar llamada transcrita"):
+                        for line in analysis["transcripcion"]:
+                            st.write(line)
+                    
+                    # Mostrar resultado del análisis
+                    with st.expander("Resultado del análisis"):
+                        if "error" in analysis:
+                            st.error(analysis["error"])
+                        else:
+                            st.json({
+                                "Tipo de llamada": analysis["tipo_llamada"],
+                                "Razón": analysis["razon"],
+                                "Información solicitada": analysis["info_solicitada"],
+                                "Resolución de la llamada": analysis["resolucion"],
+                                "Sentimiento": analysis["sentimiento"],
+                                "Observaciones": analysis["observaciones"]
+                            })
+                    
+                    # Opcionalmente, permitir descargar la transcripción etiquetada
+                    transcript_text = "\n".join(analysis["transcripcion"])
+                    st.download_button(
+                        label="Descargar Transcripción Etiquetada",
+                        data=transcript_text,
+                        file_name=f"labeled_transcript_{os.path.splitext(uploaded_file.name)[0]}.txt"
+                    )
+                    
+                    # Opcionalmente, permitir descargar el análisis en formato JSON
+                    if "tipo_llamada" in analysis:
+                        analysis_json_str = json.dumps({
                             "Tipo de llamada": analysis["tipo_llamada"],
                             "Razón": analysis["razon"],
                             "Información solicitada": analysis["info_solicitada"],
                             "Resolución de la llamada": analysis["resolucion"],
                             "Sentimiento": analysis["sentimiento"],
                             "Observaciones": analysis["observaciones"]
+                        }, ensure_ascii=False, indent=4)
+                        st.download_button(
+                            label="Descargar Análisis JSON",
+                            data=analysis_json_str,
+                            file_name=f"analysis_{os.path.splitext(uploaded_file.name)[0]}.json"
+                        )
+                    
+                    # Guardar el análisis en el estado para el chat
+                    st.session_state['analysis_results'].append({
+                        "Nombre de la llamada": uploaded_file.name,
+                        "Tipo de llamada": analysis.get("tipo_llamada", ""),
+                        "Razón": analysis.get("razon", ""),
+                        "Información solicitada": analysis.get("info_solicitada", ""),
+                        "Resolución de la llamada": analysis.get("resolucion", ""),
+                        "Sentimiento": analysis.get("sentimiento", ""),
+                        "Observaciones": analysis.get("observaciones", "")
+                    })
+                    st.session_state['processed_files'].append(uploaded_file.name)
+            else:
+                st.info(f"El archivo {uploaded_file.name} ya ha sido procesado previamente.")
+                # Mostrar los resultados existentes
+                existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == uploaded_file.name), None)
+                existing_transcription = st.session_state['transcriptions'].get(uploaded_file.name, [])
+                if existing_analysis:
+                    with st.expander("Mostrar llamada transcrita"):
+                        for line in existing_transcription:
+                            st.write(line)
+                    
+                    with st.expander("Resultado del análisis"):
+                        st.json({
+                            "Tipo de llamada": existing_analysis.get("tipo_llamada", ""),
+                            "Razón": existing_analysis.get("razon", ""),
+                            "Información solicitada": existing_analysis.get("info_solicitada", ""),
+                            "Resolución de la llamada": existing_analysis.get("resolucion", ""),
+                            "Sentimiento": existing_analysis.get("sentimiento", ""),
+                            "Observaciones": existing_analysis.get("observaciones", "")
                         })
-                
-                # Opcionalmente, permitir descargar la transcripción etiquetada
-                transcript_text = "\n".join(analysis["transcripcion"])
-                st.download_button(
-                    label="Descargar Transcripción Etiquetada",
-                    data=transcript_text,
-                    file_name=f"labeled_transcript_{os.path.splitext(uploaded_file.name)[0]}.txt"
-                )
-                
-                # Opcionalmente, permitir descargar el análisis en formato JSON
-                if "tipo_llamada" in analysis:
-                    analysis_json_str = json.dumps({
-                        "Tipo de llamada": analysis["tipo_llamada"],
-                        "Razón": analysis["razon"],
-                        "Información solicitada": analysis["info_solicitada"],
-                        "Resolución de la llamada": analysis["resolucion"],
-                        "Sentimiento": analysis["sentimiento"],
-                        "Observaciones": analysis["observaciones"]
-                    }, ensure_ascii=False, indent=4)
-                    st.download_button(
-                        label="Descargar Análisis JSON",
-                        data=analysis_json_str,
-                        file_name=f"analysis_{os.path.splitext(uploaded_file.name)[0]}.json"
-                    )
-                
-                # Guardar el análisis en el estado para el chat
-                if 'analysis_results' not in st.session_state:
-                    st.session_state['analysis_results'] = []
-                st.session_state['analysis_results'].append({
-                    "Nombre de la llamada": uploaded_file.name,
-                    "Tipo de llamada": analysis.get("tipo_llamada", ""),
-                    "Razón": analysis.get("razon", ""),
-                    "Información solicitada": analysis.get("info_solicitada", ""),
-                    "Resolución de la llamada": analysis.get("resolucion", ""),
-                    "Sentimiento": analysis.get("sentimiento", ""),
-                    "Observaciones": analysis.get("observaciones", "")
-                })
     
     elif analysis_type == "Análisis de varias llamadas (ZIP)":
         uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
@@ -444,9 +483,8 @@ if api_key:
             analysis_results = analyze_multiple_calls(uploaded_zip, api_key)
             
             # Guardar los análisis en el estado para el chat y para generar el Excel
-            if 'analysis_results' not in st.session_state:
-                st.session_state['analysis_results'] = []
-            st.session_state['analysis_results'].extend(analysis_results)
+            if analysis_results:
+                st.session_state['analysis_results'].extend(analysis_results)
             
             # Generar y mostrar el botón para descargar el Excel
             if analysis_results:
