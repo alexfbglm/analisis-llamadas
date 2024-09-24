@@ -89,7 +89,7 @@ def create_prompt(transcription):
 
     También hay que identificar el sentimiento de cada una de estas tipologías (positivo, negativo, neutro).
 
-    Por favor, devuelve el análisis en el siguiente formato JSON:
+    Por favor, devuelve el análisis en el siguiente formato JSON **sin ningún bloque de código**:
     {{
         "tipo_llamada": "Tipo de llamada",
         "razon": "Razón de la llamada",
