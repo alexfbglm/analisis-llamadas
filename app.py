@@ -34,10 +34,15 @@ def diarize_audio(audio, sr, num_speakers=2):
 
     return speaker_labels, speech_indices
 
-# Whisper transcription function
-def transcribe_audio(audio_path):
+# Whisper transcription function using audio data directly (bypassing ffmpeg)
+def transcribe_audio_data(audio_data, sr):
     model = whisper.load_model("base")
-    result = model.transcribe(audio_path)
+    # Whisper expects 16kHz audio, so resample if needed
+    if sr != 16000:
+        audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
+    
+    # Whisper expects audio as a NumPy array
+    result = model.transcribe(audio_data)
     return result
 
 # Function to load the labeled transcription from file
@@ -114,15 +119,15 @@ if uploaded_file is not None and api_key:
         temp_audio_file.write(uploaded_file.read())
         temp_audio_path = temp_audio_file.name
 
-    # Load and process audio
-    audio, sr = librosa.load(temp_audio_path, sr=None)
+    # Load and process audio directly from librosa
+    audio_data, sr = librosa.load(temp_audio_path, sr=None)
 
     # Diarize the audio
-    speaker_labels, speech_indices = diarize_audio(audio, sr)
+    speaker_labels, speech_indices = diarize_audio(audio_data, sr)
 
-    # Transcribe the audio using Whisper
+    # Transcribe the audio using Whisper with audio data
     st.write("Transcribing the audio... Please wait.")
-    result = transcribe_audio(temp_audio_path)
+    result = transcribe_audio_data(audio_data, sr)
 
     # Align transcription with speaker diarization
     transcript_with_speakers = []
