@@ -7,4 +7,3 @@ webrtcvad
 scikit-learn
 tqdm
 requests
-ffmpeg-python
