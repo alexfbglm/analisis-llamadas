@@ -10,6 +10,7 @@ import tempfile
 import os
 import pandas as pd
 import time
+import json
 
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
@@ -66,13 +67,23 @@ def create_prompt(transcription):
 
     También hay que identificar el sentimiento de cada una de estas tipologías (positivo, negativo, neutro).
 
+    Por favor, devuelve el análisis en el siguiente formato JSON:
+    {{
+        "tipo_llamada": "Tipo de llamada",
+        "razon": "Razón de la llamada",
+        "info_solicitada": "Información solicitada",
+        "resolucion": "Resolución de la llamada",
+        "sentimiento": "Sentimiento detectado",
+        "observaciones": "Observaciones adicionales"
+    }}
+
     Aquí está la transcripción etiquetada:
 
     {conversation}
     """
     return prompt
 
-# Función para enviar el prompt a GPT-4o Mini y obtener el análisis
+# Función para enviar el prompt a GPT-4o Mini y obtener el análisis en formato JSON
 def analyze_call_with_gpt_mini(prompt, api_key):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
@@ -93,7 +104,13 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     response = requests.post(url, headers=headers, json=data)
 
     if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
+        try:
+            analysis = response.json()["choices"][0]["message"]["content"]
+            # Intentamos convertir la respuesta a JSON
+            analysis_json = json.loads(analysis)
+            return analysis_json
+        except json.JSONDecodeError:
+            return f"Error al parsear el JSON: {response.json()['choices'][0]['message']['content']}"
     else:
         return f"Error {response.status_code}: {response.text}"
 
@@ -111,9 +128,21 @@ def analyze_single_call(audio_file, api_key):
         transcript_with_speakers.append(f"Speaker {speaker}: {segment['text']}")
 
     prompt = create_prompt(transcript_with_speakers)
-    analysis = analyze_call_with_gpt_mini(prompt, api_key)
+    analysis_json = analyze_call_with_gpt_mini(prompt, api_key)
 
-    return transcript_with_speakers, analysis
+    # Si no se pudo parsear a JSON, devolver el error como análisis
+    if isinstance(analysis_json, str):
+        return transcript_with_speakers, analysis_json, "", "", "", "", "", ""
+    
+    # Si se parseó correctamente el JSON, extraer los campos
+    tipo_llamada = analysis_json.get("tipo_llamada", "")
+    razon = analysis_json.get("razon", "")
+    info_solicitada = analysis_json.get("info_solicitada", "")
+    resolucion = analysis_json.get("resolucion", "")
+    sentimiento = analysis_json.get("sentimiento", "")
+    observaciones = analysis_json.get("observaciones", "")
+
+    return transcript_with_speakers, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones
 
 # Función para analizar múltiples llamadas (ZIP)
 def analyze_multiple_calls(zip_file, api_key):
@@ -122,15 +151,7 @@ def analyze_multiple_calls(zip_file, api_key):
     with zipfile.ZipFile(zip_file, 'r') as z:
         for audio_filename in z.namelist():
             with z.open(audio_filename) as audio_file:
-                transcript, analysis = analyze_single_call(audio_file, api_key)
-                
-                # Extraer partes relevantes del análisis de GPT
-                tipo_llamada = "Tipo de llamada detectado por GPT"
-                razon = "Razón detectada por GPT"
-                info_solicitada = "Información solicitada detectada por GPT"
-                resolucion = "Resolución de llamada detectada por GPT"
-                sentimiento = "Sentimiento detectado por GPT"
-                observaciones = "Observaciones adicionales detectadas por GPT"
+                transcript, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones = analyze_single_call(audio_file, api_key)
                 
                 results.append({
                     "Llamada": audio_filename,
@@ -160,7 +181,7 @@ if api_key:
         if uploaded_file:
             st.audio(uploaded_file, format="audio/mp3")
             st.write("Transcribiendo el audio... Por favor espera.")
-            transcript, analysis = analyze_single_call(uploaded_file, api_key)
+            transcript, tipo_llamada, razon, info_solicitada, resolucion, sentimiento, observaciones = analyze_single_call(uploaded_file, api_key)
             
             # Mostrar transcripción en un desplegable
             with st.expander("Mostrar llamada transcrita"):
@@ -169,7 +190,12 @@ if api_key:
             
             # Mostrar resultado del análisis
             st.write("\nResultado del análisis:")
-            st.write(analysis)
+            st.write(f"Tipo de llamada: {tipo_llamada}")
+            st.write(f"Razón: {razon}")
+            st.write(f"Información solicitada: {info_solicitada}")
+            st.write(f"Resolución de la llamada: {resolucion}")
+            st.write(f"Sentimiento: {sentimiento}")
+            st.write(f"Observaciones: {observaciones}")
     
     elif analysis_type == "Análisis de varias llamadas (ZIP)":
         uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
@@ -185,4 +211,5 @@ if api_key:
             # Descargar resultados como CSV
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(label="Descargar resultados como CSV", data=csv, file_name='resultados_analisis_llamadas.csv', mime='text/csv')
+
 
