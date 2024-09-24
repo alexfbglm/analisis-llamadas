@@ -190,21 +190,22 @@ def analyze_single_call(audio_path, api_key):
 # Función para analizar múltiples llamadas desde un archivo ZIP
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def process_audio_file(z, audio_filename):
+def process_audio_file(z, audio_filename, api_key):
     with z.open(audio_filename) as audio_file:
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_filename)[1]) as temp_audio:
             temp_audio.write(audio_file.read())
             temp_audio_path = temp_audio.name
 
     st.write(f"### Procesando: {audio_filename}")
-    analysis = analyze_single_call(temp_audio_path)
+    analysis = analyze_single_call(temp_audio_path, api_key)
 
     # Eliminar el archivo temporal después de procesarlo
     os.remove(temp_audio_path)
     
     return audio_filename, analysis
 
-def analyze_multiple_calls(zip_file):
+def analyze_multiple_calls(zip_file, api_key):
+    
     results = []
     max_workers = 4  # Ajusta según los recursos de tu máquina
 
@@ -220,7 +221,7 @@ def analyze_multiple_calls(zip_file):
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Enviar todas las tareas al ejecutor
-            futures = {executor.submit(process_audio_file, z, audio_filename): audio_filename for audio_filename in audio_files}
+            futures = {executor.submit(process_audio_file, z, audio_filename, api_key): audio_filename for audio_filename in audio_files}
             
             # Procesar los resultados a medida que se completan
             for future in as_completed(futures):
