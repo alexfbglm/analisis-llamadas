@@ -124,7 +124,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -340,9 +340,9 @@ def handle_chat(user_message, analysis_data, api_key):
     
     prompt = f"""
     Usa la siguiente información de análisis de llamadas para responder a las preguntas del usuario.
-    
+
     {context}
-    
+
     Usuario: {user_message}
     Asistente:
     """
@@ -354,7 +354,7 @@ def handle_chat(user_message, analysis_data, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",
+        "model": "gpt-4",
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -376,141 +376,175 @@ def handle_chat(user_message, analysis_data, api_key):
 # Interfaz de Streamlit en español
 st.title("Herramienta de Análisis de Llamadas")
 
-# Sidebar para ingresar la API Key y el Chat
-with st.sidebar:
-    st.header("Configuración")
-    api_key = st.text_input("Introduce tu OpenAI API Key", type="password")
-    
-    st.header("Chat de Soporte")
-    user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:")
-    if st.button("Enviar") and user_message:
-        if st.session_state['analysis_results']:
-            chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
-            st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
-        else:
-            st.warning("Por favor, realiza primero el análisis de las llamadas.")
-    
-    if st.session_state['chat_history']:
-        st.subheader("Historial del Chat")
-        for chat in reversed(st.session_state['chat_history']):
-            st.markdown(f"**Usuario:** {chat['usuario']}")
-            st.markdown(f"**Asistente:** {chat['asistente']}")
+# Crear el menú en la sidebar
+menu = st.sidebar.radio("Menú de Navegación", ("Home", "Analizador de llamadas", "Chatbot"))
 
-# Opción para seleccionar entre análisis de una llamada o varias
-analysis_type = st.radio("Selecciona tipo de análisis", ("Análisis de una llamada", "Análisis de varias llamadas (ZIP)"))
+# Entrada de la API Key (se mantiene accesible en todas las secciones que la requieran)
+st.sidebar.header("Configuración")
+api_key = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
 
-if api_key:
-    if analysis_type == "Análisis de una llamada":
-        uploaded_file = st.file_uploader("Sube un archivo de audio", type=["mp3", "wav"])
-        
-        if uploaded_file:
-            if uploaded_file.name not in st.session_state['processed_files']:
-                st.audio(uploaded_file, format="audio/mp3")
-                st.write("Transcribiendo y analizando el audio... Por favor espera.")
-                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_audio:
-                    temp_audio.write(uploaded_file.read())
-                    temp_audio_path = temp_audio.name
-                
-                analysis = analyze_single_call(temp_audio_path, api_key)
-                
-                # Eliminar el archivo temporal después de procesarlo
-                os.remove(temp_audio_path)
-                
-                if analysis is not None:
-                    # Mostrar transcripción en un desplegable
-                    with st.expander("Mostrar llamada transcrita"):
-                        for line in analysis["transcripcion"]:
-                            st.write(line)
-                    
-                    # Mostrar resultado del análisis
-                    with st.expander("Resultado del análisis"):
-                        if "error" in analysis:
-                            st.error(analysis["error"])
-                        else:
-                            st.json({
+# Contenido según la selección del menú
+if menu == "Home":
+    st.markdown("""
+    ## Bienvenido a la Herramienta de Análisis de Llamadas
+
+    Esta herramienta te permite analizar y transcribir llamadas de servicio al cliente para obtener información valiosa sobre el tipo de llamadas, las razones, la información solicitada, la resolución, el sentimiento y observaciones adicionales.
+
+    ### **Características:**
+    - **Transcripción de Llamadas:** Convierte audio a texto utilizando Whisper.
+    - **Diarización de Parlantes:** Identifica diferentes hablantes en la llamada.
+    - **Análisis con GPT-4:** Clasifica y analiza cada llamada en categorías específicas.
+    - **Chatbot de Soporte:** Interactúa con un asistente para obtener respuestas sobre los análisis realizados.
+    - **Generación de Reportes:** Descarga los análisis en formato Excel o JSON.
+
+    ### **Cómo Usar la Herramienta:**
+    1. **Analizador de Llamadas:**
+       - Sube un archivo de audio (individual o en ZIP) para comenzar el análisis.
+       - Espera a que se complete la transcripción y el análisis.
+       - Descarga los resultados en los formatos disponibles.
+
+    2. **Chatbot:**
+       - Realiza preguntas sobre los análisis de llamadas para obtener respuestas rápidas y detalladas.
+
+    ### **Requisitos:**
+    - Una clave válida de la API de OpenAI.
+    """)
+
+elif menu == "Analizador de llamadas":
+    if api_key:
+        # Opción para seleccionar entre análisis de una llamada o varias
+        analysis_type = st.radio("Selecciona tipo de análisis", ("Análisis de una llamada", "Análisis de varias llamadas (ZIP)"))
+
+        if analysis_type == "Análisis de una llamada":
+            uploaded_file = st.file_uploader("Sube un archivo de audio", type=["mp3", "wav", "m4a", "flac", "ogg"])
+
+            if uploaded_file:
+                if uploaded_file.name not in st.session_state['processed_files']:
+                    st.audio(uploaded_file, format="audio/mp3")
+                    st.write("Transcribiendo y analizando el audio... Por favor espera.")
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_audio:
+                        temp_audio.write(uploaded_file.read())
+                        temp_audio_path = temp_audio.name
+
+                    analysis = analyze_single_call(temp_audio_path, api_key)
+
+                    # Eliminar el archivo temporal después de procesarlo
+                    os.remove(temp_audio_path)
+
+                    if analysis is not None:
+                        # Mostrar transcripción en un desplegable
+                        with st.expander("Mostrar llamada transcrita"):
+                            for line in analysis["transcripcion"]:
+                                st.write(line)
+
+                        # Mostrar resultado del análisis
+                        with st.expander("Resultado del análisis"):
+                            if "error" in analysis:
+                                st.error(analysis["error"])
+                            else:
+                                st.json({
+                                    "Tipo de llamada": analysis["tipo_llamada"],
+                                    "Razón": analysis["razon"],
+                                    "Información solicitada": analysis["info_solicitada"],
+                                    "Resolución de la llamada": analysis["resolucion"],
+                                    "Sentimiento": analysis["sentimiento"],
+                                    "Observaciones": analysis["observaciones"]
+                                })
+
+                        # Opcionalmente, permitir descargar la transcripción etiquetada
+                        transcript_text = "\n".join(analysis["transcripcion"])
+                        st.download_button(
+                            label="Descargar Transcripción Etiquetada",
+                            data=transcript_text,
+                            file_name=f"labeled_transcript_{os.path.splitext(uploaded_file.name)[0]}.txt"
+                        )
+
+                        # Opcionalmente, permitir descargar el análisis en formato JSON
+                        if "tipo_llamada" in analysis:
+                            analysis_json_str = json.dumps({
                                 "Tipo de llamada": analysis["tipo_llamada"],
                                 "Razón": analysis["razon"],
                                 "Información solicitada": analysis["info_solicitada"],
                                 "Resolución de la llamada": analysis["resolucion"],
                                 "Sentimiento": analysis["sentimiento"],
                                 "Observaciones": analysis["observaciones"]
-                            })
-                    
-                    # Opcionalmente, permitir descargar la transcripción etiquetada
-                    transcript_text = "\n".join(analysis["transcripcion"])
-                    st.download_button(
-                        label="Descargar Transcripción Etiquetada",
-                        data=transcript_text,
-                        file_name=f"labeled_transcript_{os.path.splitext(uploaded_file.name)[0]}.txt"
-                    )
-                    
-                    # Opcionalmente, permitir descargar el análisis en formato JSON
-                    if "tipo_llamada" in analysis:
-                        analysis_json_str = json.dumps({
-                            "Tipo de llamada": analysis["tipo_llamada"],
-                            "Razón": analysis["razon"],
-                            "Información solicitada": analysis["info_solicitada"],
-                            "Resolución de la llamada": analysis["resolucion"],
-                            "Sentimiento": analysis["sentimiento"],
-                            "Observaciones": analysis["observaciones"]
-                        }, ensure_ascii=False, indent=4)
-                        st.download_button(
-                            label="Descargar Análisis JSON",
-                            data=analysis_json_str,
-                            file_name=f"analysis_{os.path.splitext(uploaded_file.name)[0]}.json"
-                        )
-                    
-                    # Guardar el análisis en el estado para el chat
-                    st.session_state['analysis_results'].append({
-                        "Nombre de la llamada": uploaded_file.name,
-                        "Tipo de llamada": analysis.get("tipo_llamada", ""),
-                        "Razón": analysis.get("razon", ""),
-                        "Información solicitada": analysis.get("info_solicitada", ""),
-                        "Resolución de la llamada": analysis.get("resolucion", ""),
-                        "Sentimiento": analysis.get("sentimiento", ""),
-                        "Observaciones": analysis.get("observaciones", "")
-                    })
-                    st.session_state['processed_files'].append(uploaded_file.name)
-            else:
-                st.info(f"El archivo {uploaded_file.name} ya ha sido procesado previamente.")
-                # Mostrar los resultados existentes
-                existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == uploaded_file.name), None)
-                existing_transcription = st.session_state['transcriptions'].get(uploaded_file.name, [])
-                if existing_analysis and existing_transcription:
-                    with st.expander("Mostrar llamada transcrita"):
-                        for line in existing_transcription:
-                            st.write(line)
-                    
-                    with st.expander("Resultado del análisis"):
-                        st.json({
-                            "Tipo de llamada": existing_analysis.get("tipo_llamada", ""),
-                            "Razón": existing_analysis.get("razon", ""),
-                            "Información solicitada": existing_analysis.get("info_solicitada", ""),
-                            "Resolución de la llamada": existing_analysis.get("resolucion", ""),
-                            "Sentimiento": existing_analysis.get("sentimiento", ""),
-                            "Observaciones": existing_analysis.get("observaciones", "")
+                            }, ensure_ascii=False, indent=4)
+                            st.download_button(
+                                label="Descargar Análisis JSON",
+                                data=analysis_json_str,
+                                file_name=f"analysis_{os.path.splitext(uploaded_file.name)[0]}.json"
+                            )
+
+                        # Guardar el análisis en el estado para el chat
+                        st.session_state['analysis_results'].append({
+                            "Nombre de la llamada": uploaded_file.name,
+                            "Tipo de llamada": analysis.get("tipo_llamada", ""),
+                            "Razón": analysis.get("razon", ""),
+                            "Información solicitada": analysis.get("info_solicitada", ""),
+                            "Resolución de la llamada": analysis.get("resolucion", ""),
+                            "Sentimiento": analysis.get("sentimiento", ""),
+                            "Observaciones": analysis.get("observaciones", "")
                         })
-    
-    elif analysis_type == "Análisis de varias llamadas (ZIP)":
-        uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
+                        st.session_state['processed_files'].append(uploaded_file.name)
+                else:
+                    st.info(f"El archivo {uploaded_file.name} ya ha sido procesado previamente.")
+                    # Mostrar los resultados existentes
+                    existing_analysis = next((item for item in st.session_state['analysis_results'] if item["Nombre de la llamada"] == uploaded_file.name), None)
+                    existing_transcription = st.session_state['transcriptions'].get(uploaded_file.name, [])
+                    if existing_analysis and existing_transcription:
+                        with st.expander("Mostrar llamada transcrita"):
+                            for line in existing_transcription:
+                                st.write(line)
+
+                        with st.expander("Resultado del análisis"):
+                            st.json({
+                                "Tipo de llamada": existing_analysis.get("tipo_llamada", ""),
+                                "Razón": existing_analysis.get("razon", ""),
+                                "Información solicitada": existing_analysis.get("info_solicitada", ""),
+                                "Resolución de la llamada": existing_analysis.get("resolucion", ""),
+                                "Sentimiento": existing_analysis.get("sentimiento", ""),
+                                "Observaciones": existing_analysis.get("observaciones", "")
+                            })
+
+        elif analysis_type == "Análisis de varias llamadas (ZIP)":
+            uploaded_zip = st.file_uploader("Sube un archivo ZIP con varios audios", type=["zip"])
+
+            if uploaded_zip:
+                st.write(f"Archivo ZIP subido: {uploaded_zip.name}")
+                st.write("Procesando el archivo ZIP... Por favor espera.")
+                analysis_results = analyze_multiple_calls(uploaded_zip, api_key)
+
+                # Guardar los análisis en el estado para el chat y para generar el Excel
+                if analysis_results:
+                    st.session_state['analysis_results'].extend(analysis_results)
+
+                # Generar y mostrar el botón para descargar el Excel
+                if analysis_results:
+                    excel_data = generate_excel(analysis_results)
+                    st.download_button(
+                        label="Descargar Análisis en Excel",
+                        data=excel_data,
+                        file_name="analisis_llamadas.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+    else:
+        st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
+elif menu == "Chatbot":
+    if api_key:
+        st.header("Chat de Soporte")
+        user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:")
+        if st.button("Enviar") and user_message:
+            if st.session_state['analysis_results']:
+                chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
+                st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
+            else:
+                st.warning("Por favor, realiza primero el análisis de las llamadas.")
         
-        if uploaded_zip:
-            st.write(f"Archivo ZIP subido: {uploaded_zip.name}")
-            st.write("Procesando el archivo ZIP... Por favor espera.")
-            analysis_results = analyze_multiple_calls(uploaded_zip, api_key)
-            
-            # Guardar los análisis en el estado para el chat y para generar el Excel
-            if analysis_results:
-                st.session_state['analysis_results'].extend(analysis_results)
-            
-            # Generar y mostrar el botón para descargar el Excel
-            if analysis_results:
-                excel_data = generate_excel(analysis_results)
-                st.download_button(
-                    label="Descargar Análisis en Excel",
-                    data=excel_data,
-                    file_name="analisis_llamadas.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-else:
-    st.warning("Por favor, introduce tu OpenAI API Key en la barra lateral.")
+        if st.session_state['chat_history']:
+            st.subheader("Historial del Chat")
+            for chat in reversed(st.session_state['chat_history']):
+                st.markdown(f"**Usuario:** {chat['usuario']}")
+                st.markdown(f"**Asistente:** {chat['asistente']}")
+    else:
+        st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
