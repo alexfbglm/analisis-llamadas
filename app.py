@@ -636,4 +636,3 @@ elif menu == "Chatbot":
         st.markdown('</div>', unsafe_allow_html=True)  # Cerrar main-container
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
-
