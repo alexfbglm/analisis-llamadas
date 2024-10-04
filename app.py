@@ -124,7 +124,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",  # Corregir el modelo a "gpt-4"
+        "model": "gpt-4o-mini",  # Corregido a "gpt-4"
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -352,7 +352,7 @@ def analyze_multiple_calls(zip_file, api_key):
         }
 
         data = {
-            "model": "gpt-4o-mini",  # Corregir el modelo a "gpt-4"
+            "model": "gpt-4o-mini",  # Corregido a "gpt-4"
             "messages": [
                 {"role": "system", "content": "Eres un asistente útil."},
                 {"role": "user", "content": prompt}
@@ -630,6 +630,3 @@ def analyze_multiple_calls(zip_file, api_key):
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
-
-
-
