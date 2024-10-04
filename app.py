@@ -628,7 +628,7 @@ elif menu == "Chatbot":
 
         # Crear un formulario para la entrada de mensajes
         with st.form("chat_form", clear_on_submit=True):
-            user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input", on_change=None)
+            user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input")
             submit = st.form_submit_button("Enviar")
 
         if submit and user_message:
@@ -642,3 +642,4 @@ elif menu == "Chatbot":
         st.markdown('</div>', unsafe_allow_html=True)  # Cerrar main-container
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
