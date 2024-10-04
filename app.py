@@ -360,15 +360,15 @@ def analyze_multiple_calls(zip_file, api_key):
 
             # Eliminar el archivo temporal después de procesarlo
             os.remove(temp_audio_path)
-    
-    # Función para generar el archivo Excel
-    def generate_excel(results):
-        df = pd.DataFrame(results)
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
-        processed_data = output.getvalue()
-        return processed_data
+
+# Función para generar el archivo Excel
+def generate_excel(results):
+    df = pd.DataFrame(results)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
+    processed_data = output.getvalue()
+    return processed_data
 
 # ================================
 # Interfaz de Usuario
@@ -393,6 +393,7 @@ st.markdown(
         display: flex;
         flex-direction: column;
         height: 80vh; /* Ajusta según tus necesidades */
+        margin-top: 0px; /* Eliminar margen superior */
     }
     /* Estilos para el historial de chat */
     .chat-history {
@@ -422,6 +423,7 @@ st.markdown(
         max-width: 70%;  /* Limitar el ancho máximo */
         margin-bottom: 10px;
         align-self: flex-end;  /* Alinear a la derecha */
+        margin-left: auto;  /* Alinear a la derecha */
     }
     /* Estilos para los mensajes del asistente */
     .assistant-message {
@@ -434,6 +436,10 @@ st.markdown(
         max-width: 70%;  /* Limitar el ancho máximo */
         margin-bottom: 10px;
         align-self: flex-start;  /* Alinear a la izquierda */
+    }
+    /* Reducción de la separación entre el título y los mensajes */
+    .chat-title {
+        margin-bottom: 10px;
     }
     </style>
     """,
@@ -622,7 +628,7 @@ elif menu == "Chatbot":
 
         # Crear un formulario para la entrada de mensajes
         with st.form("chat_form", clear_on_submit=True):
-            user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input")
+            user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input", on_change=None)
             submit = st.form_submit_button("Enviar")
 
         if submit and user_message:
