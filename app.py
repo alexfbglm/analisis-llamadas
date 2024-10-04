@@ -1,5 +1,6 @@
 import streamlit as st
 import librosa
+import whisper
 import numpy as np
 import zipfile
 from sklearn.cluster import AgglomerativeClustering
@@ -13,10 +14,6 @@ import os
 import time
 from io import BytesIO
 
-# Importar las nuevas librerías para el modelo de transcripción
-from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
-import torch
-
 # Inicializar el estado para los análisis, archivos procesados y transcripciones
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
@@ -26,15 +23,6 @@ if 'processed_files' not in st.session_state:
     st.session_state['processed_files'] = []
 if 'transcriptions' not in st.session_state:
     st.session_state['transcriptions'] = {}
-
-# Cargar el nuevo modelo de transcripción al inicio para evitar recargas repetidas
-@st.cache_resource
-def load_transcription_model():
-    processor = AutoProcessor.from_pretrained("openai/whisper-large-v3")
-    model = AutoModelForSpeechSeq2Seq.from_pretrained("openai/whisper-large-v3")
-    return processor, model
-
-processor, model = load_transcription_model()
 
 # Función para aplicar VAD (detección de actividad de voz)
 def apply_vad(audio, sr, frame_duration=30):
@@ -68,38 +56,33 @@ def diarize_audio(audio, sr, num_speakers=2):
 
     return speaker_labels, speech_indices
 
-# Función para transcribir audio usando el nuevo modelo con barra de progreso
+# Función para transcribir audio usando Whisper con barra de progreso
 def transcribe_audio_data_with_progress(audio_data, sr):
-    # Whisper espera audio a 16000Hz, resample si es necesario
+    model = whisper.load_model("base")
+    
+    # Whisper espera audio a 16kHz, resample si es necesario
     if sr != 16000:
         audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
-
+    
     # Inicializar barra de progreso
     progress_bar = st.progress(0)
+    total_segments = 0
+    try:
+        segments = model.transcribe(audio_data, verbose=False, fp16=False)['segments']
+        total_segments = len(segments)
+    except Exception as e:
+        st.error(f"Error al transcribir el audio: {e}")
+        return {'segments': []}
     
-    # Dividir el audio en segmentos para procesar por partes (opcional, dependiendo del modelo)
-    # Aquí asumimos que el modelo puede manejar el audio completo; si no, se deben implementar divisiones.
+    # Realizar transcripción con actualización de progreso
+    result = {'segments': []}
+    for i, segment in enumerate(segments):
+        result['segments'].append(segment)
+        progress = (i + 1) / total_segments if total_segments > 0 else 1
+        progress_bar.progress(min(progress, 1.0))  # Asegurar que no exceda 1.0
+        time.sleep(0.05)  # Pequeña demora para simular progreso en tiempo real
     
-    # Convertir el audio a tensor
-    input_features = processor(audio_data, sampling_rate=16000, return_tensors="pt").input_features
-
-    # Mover a GPU si está disponible
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    input_features = input_features.to(device)
-
-    # Realizar la transcripción
-    with torch.no_grad():
-        predicted_ids = model.generate(input_features)
-        transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-
-    # Actualizar la barra de progreso al 100%
-    progress_bar.progress(1.0)
-    
-    # Simular segmentos (esto puede ser ajustado según las necesidades)
-    segments = [{"start": 0, "text": transcription}]
-
-    return {'segments': segments}
+    return result
 
 # Función para crear el prompt para GPT
 def create_prompt(transcription):
@@ -133,7 +116,7 @@ def create_prompt(transcription):
     return prompt
 
 # Función para enviar el prompt a GPT-4 y obtener el análisis en formato JSON
-def analyze_call_with_gpt(prompt, api_key):
+def analyze_call_with_gpt_mini(prompt, api_key):
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -173,7 +156,7 @@ def analyze_single_call(audio_path, api_key):
     speaker_labels, speech_indices = diarize_audio(audio_data, sr)
     if len(speaker_labels) == 0:
         st.warning(f"No se detectó actividad de voz en {os.path.basename(audio_path)}.")
-
+    
     result = transcribe_audio_data_with_progress(audio_data, sr)
 
     if not result['segments']:
@@ -197,7 +180,7 @@ def analyze_single_call(audio_path, api_key):
     st.session_state['transcriptions'][os.path.basename(audio_path)] = transcript_with_speakers
 
     prompt = create_prompt(transcript_with_speakers)
-    analysis_json = analyze_call_with_gpt(prompt, api_key)
+    analysis_json = analyze_call_with_gpt_mini(prompt, api_key)
 
     # Si no se pudo parsear a JSON, devolver el error como análisis
     if isinstance(analysis_json, str):
@@ -408,7 +391,7 @@ if menu == "Home":
     Esta herramienta te permite analizar y transcribir llamadas de servicio al cliente para obtener información valiosa sobre el tipo de llamadas, las razones, la información solicitada, la resolución, el sentimiento y observaciones adicionales.
 
     ### **Características:**
-    - **Transcripción de Llamadas:** Convierte audio a texto utilizando el modelo avanzado de OpenAI.
+    - **Transcripción de Llamadas:** Convierte audio a texto utilizando Whisper.
     - **Diarización de Parlantes:** Identifica diferentes hablantes en la llamada.
     - **Análisis con GPT-4:** Clasifica y analiza cada llamada en categorías específicas.
     - **Chatbot de Soporte:** Interactúa con un asistente para obtener respuestas sobre los análisis realizados.
@@ -550,14 +533,27 @@ elif menu == "Analizador de llamadas":
 elif menu == "Chatbot":
     if api_key:
         st.header("Chat de Soporte")
-        user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:")
-        if st.button("Enviar") and user_message:
+
+        # Mostrar el historial del chat primero
+        if st.session_state['chat_history']:
+            st.subheader("Historial del Chat")
+            for chat in reversed(st.session_state['chat_history']):
+                st.markdown(f"**Usuario:** {chat['usuario']}")
+                st.markdown(f"**Asistente:** {chat['asistente']}")
+
+        # Crear un formulario para la entrada de mensajes
+        with st.form("chat_form", clear_on_submit=True):
+            user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input")
+            submit = st.form_submit_button("Enviar")
+
+        if submit and user_message:
             if st.session_state['analysis_results']:
                 chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
                 st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
             else:
                 st.warning("Por favor, realiza primero el análisis de las llamadas.")
-    
+
+        # Mostrar el historial actualizado después de enviar el mensaje
         if st.session_state['chat_history']:
             st.subheader("Historial del Chat")
             for chat in reversed(st.session_state['chat_history']):
