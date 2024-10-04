@@ -125,7 +125,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -175,7 +175,7 @@ def handle_chat(user_message, analysis_data, api_key):
     }
 
     data = {
-        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -248,6 +248,7 @@ def analyze_single_call(audio_path, api_key):
         "observaciones": analysis_json.get("observaciones", "")
     }
 
+# Función para analizar múltiples llamadas desde un archivo ZIP
 def analyze_multiple_calls(zip_file, api_key):
     results = []
     
@@ -359,14 +360,15 @@ def analyze_multiple_calls(zip_file, api_key):
 
             # Eliminar el archivo temporal después de procesarlo
             os.remove(temp_audio_path)
-    
-    def generate_excel(results):
-        df = pd.DataFrame(results)
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
-        processed_data = output.getvalue()
-        return processed_data
+
+# Función para generar el archivo Excel
+def generate_excel(results):
+    df = pd.DataFrame(results)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
+    processed_data = output.getvalue()
+    return processed_data
 
 # ================================
 # Interfaz de Usuario
@@ -386,29 +388,6 @@ api_key = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
 st.markdown(
     """
     <style>
-    /* Estilos para el contenedor principal */
-    .main-container {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-    }
-    /* Estilos para el historial de chat */
-    .chat-history {
-        flex: 1;
-        overflow-y: auto;
-        padding: 10px;
-        margin-bottom: 60px;  /* Espacio para la barra fija */
-    }
-    /* Estilos para la barra de entrada de chat fija */
-    .chat-container {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background-color: #ffffff;
-        padding: 10px;
-        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-    }
     /* Estilos para los mensajes del usuario */
     .user-message {
         background-color: #009dac;  /* Nuevo color */
@@ -419,7 +398,7 @@ st.markdown(
         text-align: left;
         max-width: 70%;  /* Limitar el ancho máximo */
         margin-bottom: 10px;
-        align-self: flex-end;  /* Alinear a la derecha */
+        float: right;  /* Alinear a la derecha */
     }
     /* Estilos para los mensajes del asistente */
     .assistant-message {
@@ -431,13 +410,29 @@ st.markdown(
         text-align: left;
         max-width: 70%;  /* Limitar el ancho máximo */
         margin-bottom: 10px;
-        align-self: flex-start;  /* Alinear a la izquierda */
+        float: left;  /* Alinear a la izquierda */
     }
-    /* Estilos para limpiar el layout */
+    /* Limpiar floats */
     .clearfix::after {
         content: "";
         clear: both;
         display: table;
+    }
+    /* Estilos para la barra de chat fija */
+    .chat-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #ffffff;
+        padding: 10px;
+        box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    }
+    /* Estilos para el historial de chat */
+    .chat-history {
+        max-height: 70vh;
+        overflow-y: scroll;
+        padding-bottom: 80px;  /* Espacio para la barra fija */
     }
     </style>
     """,
@@ -591,34 +586,6 @@ elif menu == "Chatbot":
     if api_key:
         st.header("Chat de Soporte")
 
-        # Contenedor principal para el chat
-        st.markdown('<div class="main-container">', unsafe_allow_html=True)
-
-        # ========================
-        # Historial de Chat
-        # ========================
-        st.markdown('<div class="chat-history">', unsafe_allow_html=True)
-
-        # Mostrar el historial del chat
-        if st.session_state['chat_history']:
-            for chat in st.session_state['chat_history']:
-                if chat['usuario']:
-                    # Mensaje del Usuario
-                    st.markdown(f"""
-                    <div class="user-message">
-                        {chat['usuario']}
-                    </div>
-                    """, unsafe_allow_html=True)
-                if chat['asistente']:
-                    # Mensaje del Asistente
-                    st.markdown(f"""
-                    <div class="assistant-message">
-                        {chat['asistente']}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
         # ========================
         # Barra de Entrada de Chat
         # ========================
@@ -637,6 +604,33 @@ elif menu == "Chatbot":
                 st.warning("Por favor, realiza primero el análisis de las llamadas.")
 
         st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)  # Cerrar main-container
+
+        # ========================
+        # Historial de Chat
+        # ========================
+        st.markdown('<div class="chat-history">', unsafe_allow_html=True)
+
+        # Mostrar el historial del chat
+        if st.session_state['chat_history']:
+            for chat in st.session_state['chat_history']:
+                if chat['usuario']:
+                    # Mensaje del Usuario
+                    st.markdown(f"""
+                    <div class="user-message">
+                        {chat['usuario']}
+                    </div>
+                    <div class="clearfix"></div>
+                    """, unsafe_allow_html=True)
+                if chat['asistente']:
+                    # Mensaje del Asistente
+                    st.markdown(f"""
+                    <div class="assistant-message">
+                        {chat['asistente']}
+                    </div>
+                    <div class="clearfix"></div>
+                    """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
