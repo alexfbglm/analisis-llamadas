@@ -1,5 +1,6 @@
 streamlit
-git+https://github.com/openai/whisper.git
+torch>=2.0.0
+transformers>=4.30.0
 torchaudio
 librosa
 numpy
