@@ -1,6 +1,5 @@
 streamlit
-torch>=2.0.0
-transformers>=4.30.0
+git+https://github.com/openai/whisper.git
 torchaudio
 librosa
 numpy
@@ -11,5 +10,4 @@ requests
 pandas
 scipy
 xlsxwriter
-
 
