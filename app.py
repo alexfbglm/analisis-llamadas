@@ -383,6 +383,29 @@ menu = st.sidebar.radio("Menú de Navegación", ("Home", "Analizador de llamadas
 st.sidebar.header("Configuración")
 api_key = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
 
+# Agregar estilos CSS personalizados para los mensajes
+st.markdown(
+    """
+    <style>
+    .user-message {
+        background-color: #DCF8C6;
+        padding: 10px;
+        border-radius: 10px;
+        text-align: right;
+        margin-bottom: 10px;
+    }
+    .assistant-message {
+        background-color: #F1F0F0;
+        padding: 10px;
+        border-radius: 10px;
+        text-align: left;
+        margin-bottom: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Contenido según la selección del menú
 if menu == "Home":
     st.markdown("""
@@ -538,8 +561,20 @@ elif menu == "Chatbot":
         if st.session_state['chat_history']:
             st.subheader("Historial del Chat")
             for chat in st.session_state['chat_history']:
-                st.markdown(f"**Usuario:** {chat['usuario']}")
-                st.markdown(f"**Asistente:** {chat['asistente']}")
+                if chat['usuario']:
+                    # Mensaje del Usuario
+                    st.markdown(f"""
+                    <div class="user-message">
+                        {chat['usuario']}
+                    </div>
+                    """, unsafe_allow_html=True)
+                if chat['asistente']:
+                    # Mensaje del Asistente
+                    st.markdown(f"""
+                    <div class="assistant-message">
+                        {chat['asistente']}
+                    </div>
+                    """, unsafe_allow_html=True)
 
         # Crear un formulario para la entrada de mensajes
         with st.form("chat_form", clear_on_submit=True):
@@ -552,9 +587,6 @@ elif menu == "Chatbot":
                 st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
             else:
                 st.warning("Por favor, realiza primero el análisis de las llamadas.")
-
-        # Mostrar el historial actualizado después de enviar el mensaje (ya se muestra arriba)
-        # Por lo tanto, no es necesario repetirlo aquí
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
 
