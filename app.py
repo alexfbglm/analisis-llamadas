@@ -145,6 +145,55 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     except json.JSONDecodeError:
         return f"Error al parsear el JSON: {analysis}"
 
+# Función para manejar el chat
+def handle_chat(user_message, analysis_data, api_key):
+    if not user_message:
+        return ""
+    
+    # Preparar el contexto a partir de los datos de análisis
+    context = "Aquí tienes los análisis de las llamadas:\n\n"
+    for call in analysis_data:
+        context += f"Llamada: {call['Nombre de la llamada']}\n"
+        for key, value in call.items():
+            if key != "Nombre de la llamada":
+                context += f"{key}: {value}\n"
+        context += "\n"
+    
+    prompt = f"""
+    Usa la siguiente información de análisis de llamadas para responder a las preguntas del usuario.
+
+    {context}
+
+    Usuario: {user_message}
+    Asistente:
+    """
+    
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
+        "messages": [
+            {"role": "system", "content": "Eres un asistente útil."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        assistant_reply = response.json()["choices"][0]["message"]["content"]
+        return assistant_reply
+    except requests.exceptions.RequestException as e:
+        return f"Error en la solicitud: {e}"
+    except json.JSONDecodeError:
+        return "Error al procesar la respuesta del asistente."
+
 # Función para analizar una sola llamada
 def analyze_single_call(audio_path, api_key):
     try:
@@ -321,55 +370,6 @@ def analyze_multiple_calls(zip_file, api_key):
             df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
         processed_data = output.getvalue()
         return processed_data
-
-    # Función para manejar el chat
-    def handle_chat(user_message, analysis_data, api_key):
-        if not user_message:
-            return ""
-        
-        # Preparar el contexto a partir de los datos de análisis
-        context = "Aquí tienes los análisis de las llamadas:\n\n"
-        for call in analysis_data:
-            context += f"Llamada: {call['Nombre de la llamada']}\n"
-            for key, value in call.items():
-                if key != "Nombre de la llamada":
-                    context += f"{key}: {value}\n"
-            context += "\n"
-        
-        prompt = f"""
-        Usa la siguiente información de análisis de llamadas para responder a las preguntas del usuario.
-
-        {context}
-
-        Usuario: {user_message}
-        Asistente:
-        """
-        
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "gpt-4o-mini",  # Corregido a "gpt-4"
-            "messages": [
-                {"role": "system", "content": "Eres un asistente útil."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-
-        try:
-            response = requests.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            assistant_reply = response.json()["choices"][0]["message"]["content"]
-            return assistant_reply
-        except requests.exceptions.RequestException as e:
-            return f"Error en la solicitud: {e}"
-        except json.JSONDecodeError:
-            return "Error al procesar la respuesta del asistente."
 
 # Interfaz de Streamlit en español
 st.title("Herramienta de Análisis de Llamadas")
@@ -566,10 +566,6 @@ elif menu == "Analizador de llamadas":
                 st.write(f"Archivo ZIP subido: {uploaded_zip.name}")
                 st.write("Procesando el archivo ZIP... Por favor espera.")
                 analysis_results = analyze_multiple_calls(uploaded_zip, api_key)
-
-                # Guardar los análisis en el estado para el chat y para generar el Excel
-                if analysis_results:
-                    st.session_state['analysis_results'].extend(analysis_results)
 
                 # Generar y mostrar el botón para descargar el Excel
                 if analysis_results:
