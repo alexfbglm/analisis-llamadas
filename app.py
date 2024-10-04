@@ -388,18 +388,32 @@ st.markdown(
     """
     <style>
     .user-message {
-        background-color: #DCF8C6;
+        background-color: #009dac;  /* Cambio de color */
+        color: white;  /* Color de texto para mejor legibilidad */
         padding: 10px;
         border-radius: 10px;
-        text-align: right;
+        display: inline-block;  /* Para ajustar al contenido */
+        text-align: left;
+        max-width: 70%;  /* Limitar el ancho máximo */
         margin-bottom: 10px;
+        float: right;  /* Alinear a la derecha */
     }
     .assistant-message {
         background-color: #F1F0F0;
+        color: black;
         padding: 10px;
         border-radius: 10px;
+        display: inline-block;  /* Para ajustar al contenido */
         text-align: left;
+        max-width: 70%;  /* Limitar el ancho máximo */
         margin-bottom: 10px;
+        float: left;  /* Alinear a la izquierda */
+    }
+    /* Limpiar floats */
+    .clearfix::after {
+        content: "";
+        clear: both;
+        display: table;
     }
     </style>
     """,
@@ -560,6 +574,7 @@ elif menu == "Chatbot":
         # Mostrar el historial del chat primero
         if st.session_state['chat_history']:
             st.subheader("Historial del Chat")
+            st.markdown('<div class="clearfix"></div>', unsafe_allow_html=True)  # Limpiar floats al inicio
             for chat in st.session_state['chat_history']:
                 if chat['usuario']:
                     # Mensaje del Usuario
@@ -567,6 +582,7 @@ elif menu == "Chatbot":
                     <div class="user-message">
                         {chat['usuario']}
                     </div>
+                    <div class="clearfix"></div>
                     """, unsafe_allow_html=True)
                 if chat['asistente']:
                     # Mensaje del Asistente
@@ -574,6 +590,7 @@ elif menu == "Chatbot":
                     <div class="assistant-message">
                         {chat['asistente']}
                     </div>
+                    <div class="clearfix"></div>
                     """, unsafe_allow_html=True)
 
         # Crear un formulario para la entrada de mensajes
@@ -589,4 +606,5 @@ elif menu == "Chatbot":
                 st.warning("Por favor, realiza primero el análisis de las llamadas.")
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
 
