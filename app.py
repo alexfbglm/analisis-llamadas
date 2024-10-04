@@ -146,12 +146,12 @@ def analyze_call_with_gpt(prompt, api_key):
     except json.JSONDecodeError:
         return f"Error al parsear el JSON: {analysis}"
 
-def handle_chat(api_key):
+def handle_chat():
     user_message = st.session_state['user_message']
     if not user_message:
         return
     if st.session_state['analysis_results']:
-        chat_response = get_chat_response(user_message, st.session_state['analysis_results'], api_key)
+        chat_response = get_chat_response(user_message, st.session_state['analysis_results'], st.session_state['api_key'])
         st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
         st.session_state['user_message'] = ''  # Clear the input after processing
     else:
@@ -373,14 +373,14 @@ def analyze_multiple_calls(zip_file, api_key):
             # Eliminar el archivo temporal después de procesarlo
             os.remove(temp_audio_path)
 
-    # Función para generar el archivo Excel
-    def generate_excel(results):
-        df = pd.DataFrame(results)
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
-        processed_data = output.getvalue()
-        return processed_data
+# Función para generar el archivo Excel
+def generate_excel(results):
+    df = pd.DataFrame(results)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Análisis de Llamadas')
+    processed_data = output.getvalue()
+    return processed_data
 
 # ================================
 # Interfaz de Usuario
@@ -394,7 +394,8 @@ menu = st.sidebar.radio("Menú de Navegación", ("Home", "Analizador de llamadas
 
 # Entrada de la API Key (se mantiene accesible en todas las secciones que la requieran)
 st.sidebar.header("Configuración")
-api_key = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
+api_key_input = st.sidebar.text_input("Introduce tu OpenAI API Key", type="password")
+st.session_state['api_key'] = api_key_input  # Guardar la API Key en el estado
 
 # Agregar estilos CSS personalizados
 st.markdown(
@@ -448,10 +449,6 @@ st.markdown(
     .chat-title {
         margin-bottom: 10px;
     }
-    /* Reducir espacio entre título y mensajes */
-    .streamlit-expanderHeader {
-        margin-bottom: 0px;
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -485,7 +482,7 @@ if menu == "Home":
     """)
 
 elif menu == "Analizador de llamadas":
-    if api_key:
+    if st.session_state['api_key']:
         # Opción para seleccionar entre análisis de una llamada o varias
         analysis_type = st.radio("Selecciona tipo de análisis", ("Análisis de una llamada", "Análisis de varias llamadas (ZIP)"))
 
@@ -500,7 +497,7 @@ elif menu == "Analizador de llamadas":
                         temp_audio.write(uploaded_file.read())
                         temp_audio_path = temp_audio.name
 
-                    analysis = analyze_single_call(temp_audio_path, api_key)
+                    analysis = analyze_single_call(temp_audio_path, st.session_state['api_key'])
 
                     # Eliminar el archivo temporal después de procesarlo
                     os.remove(temp_audio_path)
@@ -586,7 +583,7 @@ elif menu == "Analizador de llamadas":
             if uploaded_zip:
                 st.write(f"Archivo ZIP subido: {uploaded_zip.name}")
                 st.write("Procesando el archivo ZIP... Por favor espera.")
-                analysis_results = analyze_multiple_calls(uploaded_zip, api_key)
+                analysis_results = analyze_multiple_calls(uploaded_zip, st.session_state['api_key'])
 
                 # Generar y mostrar el botón para descargar el Excel
                 if analysis_results:
@@ -601,8 +598,8 @@ elif menu == "Analizador de llamadas":
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
 
 elif menu == "Chatbot":
-    if api_key:
-        st.header("Chat de Soporte", anchor=False)
+    if st.session_state['api_key']:
+        st.header("Chat de Soporte")
 
         # Contenedor principal
         chat_container = st.container()
@@ -627,19 +624,30 @@ elif menu == "Chatbot":
                             {chat['asistente']}
                         </div>
                         """, unsafe_allow_html=True)
-
             st.markdown('</div>', unsafe_allow_html=True)
 
             # Barra de Entrada de Chat
             st.markdown('<div class="chat-input">', unsafe_allow_html=True)
-            user_input = st.text_input(
-                "Escribe tu pregunta sobre los análisis de las llamadas:",
-                key="user_message",
-                on_change=handle_chat,
-                args=(api_key,),
-                label_visibility="collapsed"
-            )
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                user_input = st.text_input(
+                    "Escribe tu pregunta sobre los análisis de las llamadas:",
+                    key="user_message"
+                )
+            with col2:
+                send_button = st.button("Enviar")
+            
+            # Manejar el envío del mensaje
+            if send_button and user_input:
+                if st.session_state['analysis_results']:
+                    chat_response = get_chat_response(user_input, st.session_state['analysis_results'], st.session_state['api_key'])
+                    st.session_state['chat_history'].append({"usuario": user_input, "asistente": chat_response})
+                    st.session_state['user_message'] = ''  # Clear the input after processing
+                else:
+                    st.warning("Por favor, realiza primero el análisis de las llamadas.")
+
             st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)  # Cerrar main-container
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
