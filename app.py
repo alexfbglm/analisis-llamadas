@@ -125,7 +125,7 @@ def analyze_call_with_gpt_mini(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -175,7 +175,7 @@ def handle_chat(user_message, analysis_data, api_key):
     }
 
     data = {
-        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -359,7 +359,7 @@ def analyze_multiple_calls(zip_file, api_key):
 
             # Eliminar el archivo temporal después de procesarlo
             os.remove(temp_audio_path)
-
+    
     def generate_excel(results):
         df = pd.DataFrame(results)
         output = BytesIO()
@@ -386,6 +386,29 @@ def analyze_multiple_calls(zip_file, api_key):
     st.markdown(
         """
         <style>
+        /* Estilos para el contenedor principal */
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        /* Estilos para el historial de chat */
+        .chat-history {
+            flex: 1;
+            overflow-y: scroll;
+            padding: 10px;
+            padding-bottom: 120px;  /* Espacio para la barra fija */
+        }
+        /* Estilos para la barra de entrada de chat fija */
+        .chat-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #ffffff;
+            padding: 10px;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+        }
         /* Estilos para los mensajes del usuario */
         .user-message {
             background-color: #009dac;  /* Nuevo color */
@@ -396,7 +419,7 @@ def analyze_multiple_calls(zip_file, api_key):
             text-align: left;
             max-width: 70%;  /* Limitar el ancho máximo */
             margin-bottom: 10px;
-            float: right;  /* Alinear a la derecha */
+            align-self: flex-end;  /* Alinear a la derecha */
         }
         /* Estilos para los mensajes del asistente */
         .assistant-message {
@@ -408,29 +431,7 @@ def analyze_multiple_calls(zip_file, api_key):
             text-align: left;
             max-width: 70%;  /* Limitar el ancho máximo */
             margin-bottom: 10px;
-            float: left;  /* Alinear a la izquierda */
-        }
-        /* Limpiar floats */
-        .clearfix::after {
-            content: "";
-            clear: both;
-            display: table;
-        }
-        /* Estilos para la barra de chat fija */
-        .chat-container {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: #ffffff;
-            padding: 10px;
-            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-        }
-        /* Estilos para el historial de chat */
-        .chat-history {
-            max-height: 70vh;
-            overflow-y: scroll;
-            padding-bottom: 120px;  /* Espacio para la barra fija */
+            align-self: flex-start;  /* Alinear a la izquierda */
         }
         </style>
         """,
@@ -584,26 +585,31 @@ def analyze_multiple_calls(zip_file, api_key):
         if api_key:
             st.header("Chat de Soporte")
 
-            # Procesar la entrada del usuario antes de mostrar el historial
-            with st.container():
-                # Crear la barra de entrada de chat fija
-                st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+            # Contenedor principal para el chat
+            st.markdown('<div class="main-container">', unsafe_allow_html=True)
 
-                # Crear un formulario para la entrada de mensajes
-                with st.form("chat_form", clear_on_submit=True):
-                    user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input")
-                    submit = st.form_submit_button("Enviar")
+            # ========================
+            # Barra de Entrada de Chat
+            # ========================
+            st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
-                if submit and user_message:
-                    if st.session_state['analysis_results']:
-                        chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
-                        st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
-                    else:
-                        st.warning("Por favor, realiza primero el análisis de las llamadas.")
+            # Crear un formulario para la entrada de mensajes
+            with st.form("chat_form", clear_on_submit=True):
+                user_message = st.text_input("Escribe tu pregunta sobre los análisis de las llamadas:", key="chat_input")
+                submit = st.form_submit_button("Enviar")
 
-                st.markdown('</div>', unsafe_allow_html=True)
+            if submit and user_message:
+                if st.session_state['analysis_results']:
+                    chat_response = handle_chat(user_message, st.session_state['analysis_results'], api_key)
+                    st.session_state['chat_history'].append({"usuario": user_message, "asistente": chat_response})
+                else:
+                    st.warning("Por favor, realiza primero el análisis de las llamadas.")
 
-            # Crear un contenedor para el historial de chat con scroll
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # ========================
+            # Historial de Chat
+            # ========================
             st.markdown('<div class="chat-history">', unsafe_allow_html=True)
 
             # Mostrar el historial del chat
@@ -615,7 +621,6 @@ def analyze_multiple_calls(zip_file, api_key):
                         <div class="user-message">
                             {chat['usuario']}
                         </div>
-                        <div class="clearfix"></div>
                         """, unsafe_allow_html=True)
                     if chat['asistente']:
                         # Mensaje del Asistente
@@ -623,10 +628,10 @@ def analyze_multiple_calls(zip_file, api_key):
                         <div class="assistant-message">
                             {chat['asistente']}
                         </div>
-                        <div class="clearfix"></div>
                         """, unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)  # Cerrar main-container
         else:
             st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
 
