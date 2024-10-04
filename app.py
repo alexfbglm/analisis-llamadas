@@ -553,11 +553,8 @@ elif menu == "Chatbot":
             else:
                 st.warning("Por favor, realiza primero el análisis de las llamadas.")
 
-        # Mostrar el historial actualizado después de enviar el mensaje
-        if st.session_state['chat_history']:
-            st.subheader("Historial del Chat")
-            for chat in reversed(st.session_state['chat_history']):
-                st.markdown(f"**Usuario:** {chat['usuario']}")
-                st.markdown(f"**Asistente:** {chat['asistente']}")
+        # Mostrar el historial actualizado después de enviar el mensaje (ya se muestra arriba)
+        # Por lo tanto, no es necesario repetirlo aquí
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
