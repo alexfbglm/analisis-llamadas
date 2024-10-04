@@ -141,7 +141,7 @@ def analyze_call_with_gpt(prompt, api_key):
     }
 
     data = {
-        "model": "gpt-4",  # Asegúrate de que el modelo sea correcto
+        "model": "gpt-4o-mini",  # Asegúrate de que el modelo sea correcto
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
@@ -371,7 +371,7 @@ def handle_chat(user_message, analysis_data, api_key):
     }
 
     data = {
-        "model": "gpt-4",
+        "model": "gpt-4o-mini",
         "messages": [
             {"role": "system", "content": "Eres un asistente útil."},
             {"role": "user", "content": prompt}
