@@ -25,6 +25,8 @@ if 'processed_files' not in st.session_state:
     st.session_state['processed_files'] = []
 if 'transcriptions' not in st.session_state:
     st.session_state['transcriptions'] = {}
+if 'user_message' not in st.session_state:
+    st.session_state['user_message'] = ''
 
 # ================================
 # Definición de Funciones
@@ -405,7 +407,7 @@ st.markdown(
     .main-container {
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 100px); /* Ajustar según sea necesario */
+        height: calc(100vh - 150px); /* Ajustar según sea necesario */
         margin: 0;
         padding: 0;
     }
@@ -447,6 +449,14 @@ st.markdown(
     }
     /* Título del chat */
     .chat-title {
+        margin-bottom: 10px;
+    }
+    /* Reducir espacio entre título y mensajes */
+    .streamlit-expanderHeader {
+        margin-bottom: 0px;
+    }
+    /* Ajustar el margen del título principal */
+    .block-container > .main > div > div > div > div > div > h1 {
         margin-bottom: 10px;
     }
     </style>
@@ -650,4 +660,5 @@ elif menu == "Chatbot":
             st.markdown('</div>', unsafe_allow_html=True)  # Cerrar main-container
     else:
         st.warning("Por favor, introduce tu OpenAI API Key en la sección de Configuración.")
+
 
