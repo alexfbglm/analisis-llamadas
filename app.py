@@ -537,7 +537,7 @@ elif menu == "Chatbot":
         # Mostrar el historial del chat primero
         if st.session_state['chat_history']:
             st.subheader("Historial del Chat")
-            for chat in reversed(st.session_state['chat_history']):
+            for chat in st.session_state['chat_history']:
                 st.markdown(f"**Usuario:** {chat['usuario']}")
                 st.markdown(f"**Asistente:** {chat['asistente']}")
 
